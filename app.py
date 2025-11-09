@@ -350,6 +350,7 @@ if music_data is not None:
                    6: 'F#', 7: 'G', 8: 'G#', 9: 'A', 10: 'A#', 11: 'B'}
     key_options = list(key_mapping.values())
 
+
     # ---------------------------------------------------
     # GLOBAL FILTERS SECTION (Available for all tabs)
     # ---------------------------------------------------
@@ -394,6 +395,19 @@ if music_data is not None:
             )
     
     selected_key_numbers = [k for k, v in key_mapping.items() if v in key_filter_names]
+
+    st.sidebar.markdown("### 🔬 Compare Mode")
+    compare_mode = st.sidebar.checkbox("Enable Comparison Mode")
+
+    if compare_mode:
+        st.sidebar.markdown("**Select items to compare:**")
+        compare_type = st.sidebar.radio("Compare:", ["Decades", "Genres", "Artists"])
+        
+        if compare_type == "Decades":
+            decade1 = st.sidebar.selectbox("First Decade", decade_options)
+            decade2 = st.sidebar.selectbox("Second Decade", decade_options)
+            # Store in session state for use in visualizations
+            st.session_state.compare_items = (decade1, decade2)
 
     @st.cache_data 
     def get_filtered_data(df, decade_range, pop_range, explicit, keys):
