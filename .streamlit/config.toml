@@ -1,0 +1,23 @@
+[theme]
+# Spotify Green
+primaryColor = "#1DB954"
+
+# Dark background like Spotify
+backgroundColor = "#121212"
+
+# Slightly lighter for contrast
+secondaryBackgroundColor = "#181818"
+
+# Light text for dark theme
+textColor = "#FFFFFF"
+
+# Sans serif like Spotify's Circular
+font = "sans serif"
+
+[server]
+# Dark theme for better Spotify feel
+headless = true
+
+[browser]
+# Custom tab title
+gatherUsageStats = false
