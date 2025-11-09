@@ -431,7 +431,31 @@ if music_data is not None:
     if st.session_state.current_tab == "Dashboard":
         st.header("📊 Music Analytics Dashboard")
         st.markdown("Explore trends in audio features and understand what makes songs popular.")
-        
+
+        # ---------------------------------------------------
+        # EXECUTIVE SUMMARY - QUICK INSIGHTS
+        # ---------------------------------------------------
+        st.subheader("📈 Dashboard Summary")
+
+        # Create quick insight cards
+        col_quick1, col_quick2, col_quick3, col_quick4 = st.columns(4)
+
+        with col_quick1:
+            trending_feature = df_year.iloc[-1][['energy', 'danceability', 'valence']].idxmax()
+            st.info(f"**🔥 Trending Feature**\n\n{trending_feature.capitalize()} is dominating modern music")
+
+        with col_quick2:
+            growth_rate = ((df_year.iloc[-1]['popularity'] - df_year.iloc[-10]['popularity']) / df_year.iloc[-10]['popularity']) * 100
+            st.success(f"**📊 10-Year Growth**\n\n{growth_rate:.1f}% popularity increase")
+
+        with col_quick3:
+            dominant_mode = "Major" if df_filtered['mode'].mean() > 0.5 else "Minor"
+            st.warning(f"**🎵 Dominant Mode**\n\n{dominant_mode} keys rule the charts")
+
+        with col_quick4:
+            avg_duration = df_filtered['duration_ms'].mean() / 60000
+            st.error(f"**⏱️ Avg Duration**\n\n{avg_duration:.1f} minutes per song")
+
         # ---------------------------------------------------
         # VIZ 1: Audio Features Over Time - ALL FEATURES
         # ---------------------------------------------------
