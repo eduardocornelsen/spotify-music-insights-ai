@@ -60,7 +60,7 @@ Traditional music analytics tools show you **what** happened, but fail to explai
 | **🎯 Feature Engineering** | *"Find the optimal BPM range for workout playlist songs"* | Calculates percentiles and distributions |
 | **🏆 Success Patterns** | *"What audio DNA do all Billboard #1 hits share?"* | Performs clustering analysis |
 
-<a href="https://music-insights-ai-demo.onrender.com/">
+<a href="https://spotify-music-insights-ai.streamlit.app/">
 <img src="https://img.shields.io/badge/🎵_Try_These_Questions_Live-1DB954?style=for-the-badge&logoColor=white" height="50">
 </a>
 
