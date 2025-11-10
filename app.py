@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from scipy import stats
 from langchain.tools import tool
+import time
 
 # --- Importações do LangChain (Tool Calling Agent) ---
 try:
@@ -23,7 +24,8 @@ except Exception:
 # Read System Prompt from file
 system_prompt = Path("./prompts/system.txt").read_text()
 
-# --- Configuração da Página ---
+
+# --- PAGE CONFIG ---
 st.set_page_config(
     page_title="MusicInsights AI",
     page_icon="🎵",
@@ -31,135 +33,300 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Custom CSS for Spotify Theme ---
-st.markdown("""
-<style>
-    /* Main container styling */
-    .main {
-        background-color: #121212;
-    }
-    
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {
-        background-color: #000000;
-        border-right: 1px solid #282828;
-    }
-    
-    /* Headers styling */
-    h1, h2, h3 {
-        color: #FFFFFF !important;
-        font-weight: 700 !important;
-    }
-    
-    /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #181818;
-        border-radius: 8px;
-        padding: 4px;
-        gap: 8px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background-color: transparent;
-        color: #B3B3B3;
-        border-radius: 4px;
-        font-weight: 600;
-        padding: 8px 16px;
-    }
-    
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background-color: #1DB954;
-        color: #000000;
-    }
-    
-    /* Button styling */
-    .stButton > button {
-        background-color: #1DB954;
-        color: #000000;
-        border: none;
-        border-radius: 500px;
-        font-weight: 700;
-        transition: all 0.3s;
-    }
-    
-    .stButton > button:hover {
-        background-color: #1ED760;
-        transform: scale(1.02);
-    }
-    
-    /* Metric styling */
-    [data-testid="metric-container"] {
-        background-color: #181818;
-        border: 1px solid #282828;
-        padding: 1rem;
-        border-radius: 8px;
-    }
-    
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        background-color: #181818;
-        border-radius: 8px;
-        color: #FFFFFF;
-    }
-    
-    /* Info box styling */
-    .stAlert {
-        background-color: #181818;
-        border: 1px solid #282828;
-        border-radius: 8px;
-    }
-    
-    /* Selectbox and inputs */
-    .stSelectbox > div > div {
-        background-color: #282828;
-    }
-    
-    /* Radio button group */
-    .stRadio > div {
-        background-color: #181818;
-        padding: 8px;
-        border-radius: 8px;
-    }
-    
-    /* Dataframe styling */
-    .dataframe {
-        background-color: #181818 !important;
-    }
-    
-    /* Plotly charts background */
-    .js-plotly-plot {
-        background-color: #181818 !important;
-    }
-    
-    /* Navigation buttons in sidebar */
-    .nav-button {
-        width: 100%;
-        text-align: left;
-        padding: 12px 16px;
-        margin: 4px 0;
-        background-color: #181818;
-        border: none;
-        border-radius: 8px;
-        color: #B3B3B3;
-        font-weight: 600;
-        transition: all 0.2s;
-    }
-    
-    .nav-button:hover {
-        background-color: #282828;
-        color: #FFFFFF;
-    }
-    
-    .nav-button.active {
-        background-color: #1DB954;
-        color: #000000;
-    }
-</style>
-""", unsafe_allow_html=True)
 
-# --- Carregar e Limpar os Dados (com cache) ---
+# --- UTILITY FUNCTIONS FOR ANIMATIONS ---
+
+def show_loading_animation(message="Loading...", duration=0.5):
+    """Custom loading animation for operations"""
+    with st.spinner(f'🎵 {message}'):
+        time.sleep(duration)  # Simulated delay
+        # Actual computation will replace the sleep
+        
+def animated_success(message, duration=2):
+    """Animated success message that auto-disappears"""
+    placeholder = st.empty()
+    placeholder.success(f"✅ {message}")
+    time.sleep(duration)
+    placeholder.empty()
+
+def animated_info(message, duration=3):
+    """Animated info message"""
+    placeholder = st.empty()
+    placeholder.info(f"ℹ️ {message}")
+    time.sleep(duration)
+    placeholder.empty()
+
+def animated_warning(message, duration=3):
+    """Animated warning message"""
+    placeholder = st.empty()
+    placeholder.warning(f"⚠️ {message}")
+    time.sleep(duration)
+    placeholder.empty()
+
+def progress_bar_loading(message="Processing...", steps=100):
+    """Show progress bar for multi-step operations"""
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i in range(steps):
+        progress_bar.progress((i + 1) / steps)
+        status_text.text(f'{message} {i+1}%')
+        time.sleep(0.01)  # Adjust speed as needed
+    
+    progress_bar.empty()
+    status_text.empty()
+
+
+# --- CSS AND STYLING FUNCTIONS ---
+def apply_all_effects():
+    """Apply all visual effects to the dashboard"""
+    st.markdown("""
+    <style>
+        /* ============ SMOOTH SCROLLING ============ */
+        html, body, [data-testid="stAppViewContainer"], .main {
+            scroll-behavior: smooth;
+        }
+        
+        /* ============ NAVIGATION BUTTON STYLING (FIXED) ============ */
+        
+        /* Grey buttons (default inactive state) - ALL sidebar buttons */
+        section[data-testid="stSidebar"] .stButton > button {
+            background: #282828 !important;
+            color: #B3B3B3 !important;
+            border: 1px solid #404040 !important;
+            border-radius: 500px !important;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+        
+        /* Hover for inactive buttons */
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            background: #404040 !important;
+            color: #FFFFFF !important;
+            transform: translateX(5px);
+            border-color: #606060 !important;
+        }
+        
+        /* Green active buttons (primary) */
+        section[data-testid="stSidebar"] button[kind="primary"] {
+            background: linear-gradient(135deg, #1DB954 0%, #1ED760 100%) !important;
+            color: #000000 !important;
+            border: none !important;
+            border-radius: 500px !important;
+            box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3) !important;
+        }
+        
+        /* ============ OTHER BUTTON EFFECTS (for non-navigation) ============ */
+        .main .stButton > button {
+            background: linear-gradient(135deg, #1DB954 0%, #1ED760 100%);
+            color: #000000;
+            border: none;
+            border-radius: 500px;
+            font-weight: 700;
+            padding: 0.75rem 2rem;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(29, 185, 84, 0.2);
+        }
+        
+        .main .stButton > button:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 7px 25px rgba(29, 185, 84, 0.4);
+            background: linear-gradient(135deg, #1ED760 0%, #22E868 100%);
+        }
+        
+        /* ============ SIDEBAR EFFECTS WITH ANIMATION ============ */
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(-45deg, #000000, #0a0a0a, #1a1a1a, #0f0f0f);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+        }
+        
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        /* Sidebar headers with animated gradient */
+        section[data-testid="stSidebar"] h1,
+        section[data-testid="stSidebar"] h2,
+        section[data-testid="stSidebar"] h3 {
+            background: linear-gradient(90deg, #1DB954, #1ED760, #1DB954);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: textShine 3s linear infinite;
+        }
+        
+        @keyframes textShine {
+            to { background-position: 200% center; }
+        }
+        
+        /* ============ SCROLLBAR STYLING ============ */
+        ::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(24, 24, 24, 0.5);
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(to bottom, #1DB954, #1ED760);
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(to bottom, #1ED760, #22E868);
+            box-shadow: 0 0 15px rgba(29, 185, 84, 0.5);
+        }
+        
+        /* ============ TAB ANIMATIONS ============ */
+        .stTabs [data-baseweb="tab"] {
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stTabs [data-baseweb="tab"]:hover {
+            transform: translateY(-2px);
+        }
+        
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+            box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3);
+            animation: tabPulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes tabPulse {
+            0%, 100% { box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3); }
+            50% { box-shadow: 0 4px 25px rgba(29, 185, 84, 0.5); }
+        }
+        
+        /* ============ METRICS ANIMATIONS ============ */
+        [data-testid="metric-container"] {
+            transition: all 0.2s ease;
+        }
+        
+        [data-testid="metric-container"]:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 5px 20px rgba(29, 185, 84, 0.3);
+        }
+        
+        /* ============ FADE IN ANIMATION (FAST) ============ */
+        .element-container {
+            animation: fadeInUp 0.3s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* ============ SELECTBOX & RADIO EFFECTS ============ */
+        .stSelectbox > div > div {
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+        
+        .stSelectbox > div > div:hover {
+            border-color: #1DB954;
+            box-shadow: 0 0 15px rgba(29, 185, 84, 0.2);
+        }
+        
+        .stRadio > div {
+            background: rgba(24, 24, 24, 0.3);
+            padding: 8px;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+        
+        .stRadio > div:hover {
+            background: rgba(29, 185, 84, 0.1);
+        }
+        
+        /* ============ EXPANDER EFFECTS ============ */
+        .streamlit-expanderHeader {
+            transition: all 0.2s ease;
+            background: linear-gradient(90deg, transparent, rgba(29, 185, 84, 0.05), transparent);
+            background-size: 200% 100%;
+        }
+        
+        .streamlit-expanderHeader:hover {
+            background: rgba(29, 185, 84, 0.15);
+            transform: scale(1.01);
+        }
+        
+        /* ============ INFO/WARNING/ERROR BOXES ============ */
+        .stAlert {
+            animation: slideInLeft 0.3s ease;
+            transition: all 0.2s ease;
+        }
+        
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        /* ============ PLOTLY CHARTS CONTAINER ============ */
+        [data-testid="stPlotlyChart"] {
+            animation: fadeIn 0.4s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+    
+    <!-- Scroll to top button -->
+    <a href="#" id="scrollTop" style="
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #1DB954, #1ED760);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: black;
+        text-decoration: none;
+        font-size: 24px;
+        font-weight: bold;
+        box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3);
+        opacity: 0.8;
+        transition: all 0.2s ease;
+        z-index: 999;
+    " onmouseover="this.style.transform='translateY(-5px)'; this.style.opacity='1';" 
+       onmouseout="this.style.transform='translateY(0)'; this.style.opacity='0.8';">↑</a>
+    """, unsafe_allow_html=True)
+
+apply_all_effects()
+
+# --- Cached data and animations with progress details ---
 @st.cache_data
 def load_data():
+    """Load data - cached after first load"""
     try:
         # Load all datasets
         data_main = pd.read_csv('data/data.csv')
@@ -185,7 +352,108 @@ def load_data():
         st.error(f"Erro ao carregar os dados: {e}")
         return None
 
-music_data = load_data()
+# --- Loading with animation and session tracking ---
+if 'initial_load_complete' not in st.session_state:
+    # First time loading - show animation
+    loading_container = st.container()
+    
+    with loading_container:
+        st.markdown("### ⏳ Initializing...")
+        
+        # Create progress bar
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Step 1: Start loading
+        status_text.text('📂 Locating data files...')
+        progress_bar.progress(20)
+        time.sleep(0.3)  # Brief pause for UX
+        
+        # Step 2: Load data
+        status_text.text('📊 Loading 160,000+ tracks...')
+        progress_bar.progress(40)
+        
+        with st.spinner('Processing music database...'):
+            music_data = load_data()
+        
+        if music_data:
+            # Step 3: Validate
+            status_text.text('✅ Validating data integrity...')
+            progress_bar.progress(60)
+            time.sleep(0.3)
+            
+            # Step 4: Calculate stats
+            status_text.text('📈 Calculating statistics...')
+            progress_bar.progress(80)
+            total_tracks = len(music_data['main'])
+            total_artists = len(music_data['by_artist'])
+            time.sleep(0.3)
+            
+            # Step 5: Complete
+            status_text.text('🎉 Ready!')
+            progress_bar.progress(100)
+            time.sleep(0.5)
+            
+            # Clear loading UI
+            #progress_bar.empty()
+            #status_text.empty()
+            
+            
+            # Show success metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Tracks Loaded", f"{total_tracks:,}")
+            with col2:
+                st.metric("Artists", f"{total_artists:,}")
+            with col3:
+                st.metric("Years", "1921-2020")
+            
+
+            loading_container.empty()
+
+            # Mark as loaded
+            st.session_state.initial_load_complete = True
+            
+            # Auto-clear success message after 3 seconds
+            success_placeholder = st.empty()
+            success_placeholder.success("✅ MusicInsights AI is ready! Explore 100 years of music evolution.")
+            time.sleep(3)
+            success_placeholder.empty()
+            st.rerun()
+
+        else:
+            # Error occurred
+            progress_bar.empty()
+            status_text.empty()
+            st.error("❌ Failed to load data. Please check the data files.")
+            st.stop()
+else:
+    # Subsequent runs - load instantly from cache
+    music_data = load_data()
+    # Ensure any stray success messages are cleared
+    st.empty()
+
+
+# After loading, show quick stats
+if music_data and 'stats_shown' not in st.session_state:
+        
+    # Show the stats in a "toast" notification
+    st.toast(
+        f"""
+        **Dataset Ready**
+    
+        
+        - {len(music_data['main']):,} tracks
+        - {len(music_data['by_artist']):,} artists 
+        - {len(music_data['by_genres']):,} genres
+        - 100 years of music ✨
+        """,
+        icon="✅"  # <--- This makes it look like a "success" toast
+    )
+    
+    # Set the flag so it only runs once
+    st.session_state.stats_shown = True
+
 
 # --- LOGO E DADOS DO DATASET ---
 spotify_logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/1024px-Spotify_logo_without_text.svg.png"
@@ -202,46 +470,150 @@ st.sidebar.markdown("""
 <h2 style='color: #1DB954; margin-bottom: 20px;'>MusicInsights AI</h2>
 """, unsafe_allow_html=True)
 
-# Navigation Section
 st.sidebar.markdown("### 🎵 Navigation")
 
-# Navigation buttons with AI Assistant highlighted
-tabs = ["Dashboard", "Insights", "AI Consultant", "Data Explorer"]
-for tab in tabs:
-    # Special styling for AI Consultant
+tabs = ["AI Consultant", "Dashboard", "Insights", "Data Explorer"]
+
+for i, tab in enumerate(tabs):
+    is_active = st.session_state.current_tab == tab
+    
+    # Special handling for AI Consultant (first button, index 0)
+    if tab == "AI Consultant" and not is_active:
+        # Apply white style using a unique class identifier
+        st.sidebar.markdown(f"""
+        <style>
+            button[key="nav_AI_Consultant"]:not([kind="primary"]) {{
+                background: #FFFFFF !important;
+                color: #121212 !important;
+                border: 2px solid #1DB954 !important;
+                font-weight: 700 !important;
+            }}
+            button[key="nav_AI_Consultant"]:not([kind="primary"]):hover {{
+                background: #F0F0F0 !important;
+                box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3) !important;
+            }}
+        </style>
+        """, unsafe_allow_html=True)
+    
+    # Button creation
     if tab == "AI Consultant":
-        if st.sidebar.button(
-            f"🧠 {tab} 💬", 
-            key=f"nav_{tab}",
-            use_container_width=True,
-            type="primary" if st.session_state.current_tab == tab else "secondary",
-            help="AI-powered data analysis assistant"
-        ):
-            st.session_state.current_tab = tab
-            st.rerun()  # Force rerun to update the page
+        button_label = f"🧠 {tab} 💬"
     else:
-        icon = '📊' if tab == 'Dashboard' else '💡' if tab == 'Insights' else '📁'
-        if st.sidebar.button(
-            f"{icon} {tab}", 
-            key=f"nav_{tab}",
-            use_container_width=True,
-            type="primary" if st.session_state.current_tab == tab else "secondary"
-        ):
-            st.session_state.current_tab = tab
-            st.rerun()  # Force rerun to update the page
+        icon = {'Dashboard': '📊', 'Insights': '💡', 'Data Explorer': '📁'}.get(tab, '📄')
+        button_label = f"{icon} {tab}"
+    
+    if st.sidebar.button(
+        button_label,
+        key=f"nav_{tab.replace(' ', '_')}",
+        use_container_width=True,
+        type="primary" if is_active else "secondary"
+    ):
+        st.session_state.current_tab = tab
+        st.rerun()
+            
 
-# Highlight AI Assistant with custom HTML
-if st.session_state.current_tab == "AI Consultant":
-    st.sidebar.markdown("""
-    <div style='background: linear-gradient(135deg, #1DB954 0%, #1ED760 100%);
-                padding: 10px; border-radius: 8px; margin: 10px 0;'>
-        <p style='color: black; font-weight: bold; margin: 0; text-align: center;'>
-            🤖 AI Assistant Active
-        </p>
+# ADD DATASET STATS 
+
+def display_sidebar_stats(music_data, df_filtered=None):
+    """Display dynamic statistics in sidebar using consistent data sources."""
+    
+    # --- Base stats from the main data dictionary ---
+    total_tracks = len(music_data['main'])
+    total_artists = len(music_data['by_artist'])
+    total_genres = len(music_data['by_genres'])
+    
+    # --- Calculate stats for the *current* view ---
+    if df_filtered is not None and len(df_filtered) > 0:
+        # Use filtered data
+        current_df = df_filtered
+        current_tracks = len(current_df)
+    else:
+        # Use original data
+        current_df = music_data['main']
+        current_tracks = total_tracks
+    
+    # Calculate stats from the *current* dataframe
+    # Note: These are now consistent, whether filtered or not
+    current_years = f"{current_df['year'].min()}-{current_df['year'].max()}"
+    current_artists = current_df['artists'].nunique() # This might be different from total_artists if your 'artists' column is complex
+    avg_popularity = current_df['popularity'].mean()
+    explicit_count = current_df['explicit'].sum()
+
+    percentage = (current_tracks / total_tracks) * 100 if total_tracks > 0 else 0
+    
+    st.sidebar.html(f"""
+    <div style="
+        background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+        border: 2px solid #1DB954;
+        border-radius: 12px;
+        padding: 15px;
+        margin: 10px 0;
+        box-shadow: 0 4px 12px rgba(29, 185, 84, 0.2);
+    ">
+        <h4 style="
+            color: #1DB954; 
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        ">📊 Active Dataset</h4>
+        
+        <div style="
+            text-align: center;
+            padding: 10px;
+            background: #0a0a0a;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        ">
+            <div style="color: #1DB954; font-size: 32px; font-weight: bold;">
+                {current_tracks:,}
+            </div>
+            <div style="color: #888; font-size: 12px;">
+                tracks selected ({percentage:.0f}%)
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+            <div style="
+                background: #0a0a0a;
+                padding: 8px;
+                border-radius: 6px;
+                text-align: center;
+            ">
+                <div style="color: #1DB954; font-weight: bold;">{current_years}</div>
+                <div style="color: #666; font-size: 10px;">Years</div>
+            </div>
+            <div style="
+                background: #0a0a0a;
+                padding: 8px;
+                border-radius: 6px;
+                text-align: center;
+            ">
+                <div style="color: #1DB954; font-weight: bold;">{current_artists:,}</div>
+                <div style="color: #666; font-size: 10px;">Artists</div>
+            </div>
+            <div style="
+                background: #0a0a0a;
+                padding: 8px;
+                border-radius: 6px;
+                text-align: center;
+            ">
+                <div style="color: #1DB954; font-weight: bold;">{avg_popularity:.0f}</div>
+                <div style="color: #666; font-size: 10px;">Avg Pop</div>
+            </div>
+            <div style="
+                background: #0a0a0a;
+                padding: 8px;
+                border-radius: 6px;
+                text-align: center;
+            ">
+                <div style="color: #1DB954; font-weight: bold;">{explicit_count:,}</div>
+                <div style="color: #666; font-size: 10px;">Explicit</div>
+            </div>
+        </div>
     </div>
-    """, unsafe_allow_html=True)
-
-st.sidebar.markdown("---")
+    """)
 
 
 # --------------------------------------------------------
@@ -433,6 +805,19 @@ if music_data is not None:
         selected_key_numbers
     )
 
+if music_data is not None:
+    st.sidebar.markdown("---")
+    
+    df_to_show = df_filtered if 'df_filtered' in locals() else None
+    
+    # Pass the *whole* music_data dict
+    display_sidebar_stats(
+        music_data=music_data,
+        df_filtered=df_to_show
+    )
+    
+    st.sidebar.markdown("---")
+        
     # --------------------------------------------------------
     # TAB 1: DASHBOARD
     # --------------------------------------------------------
@@ -484,7 +869,33 @@ if music_data is not None:
                 st.info("Performance Mode enabled: Click on tabs to load visualizations")
         
         if performance_mode:
-            # ===== PERFORMANCE MODE: TABBED INTERFACE =====
+            st.markdown("""
+            <style>
+                /* Visual indicator for scrollable tabs */
+                .stTabs [data-baseweb="tab-list"] {
+                    background: linear-gradient(90deg, 
+                        #181818 0%, 
+                        transparent 5%, 
+                        transparent 95%, 
+                        #181818 100%);
+                    padding: 0 20px;
+                }
+                
+                /* Pulsing indicator */
+                .scroll-hint {
+                    display: inline-block;
+                    margin-left: 10px;
+                    animation: blink 2s infinite;
+                }
+                
+                @keyframes blink {
+                    0%, 100% { opacity: 0.3; }
+                    50% { opacity: 1; }
+                }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            
             viz_tabs = st.tabs([
                 "📈 Evolution", "📊 Correlations", "🎸 Genres", "🔞 Explicit",
                 "🔗 Features", "⏱️ Temporal", "👤 Artists", "🔍 Explorer",
@@ -492,6 +903,8 @@ if music_data is not None:
                 "📈 Explicit Trends", "🌟 Popularity", "🚀 Artist Evolution",
                 "💬 Titles", "🤝 Collaborations"
             ])
+
+        # Show selected content
         
             # ---------------------------------------------------
             # VIZ 1: Audio Features Over Time - ALL FEATURES
@@ -567,8 +980,7 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 2: Popularity vs Audio Features - ENHANCED
             # ---------------------------------------------------
-            st.divider()
-            
+                        
             with viz_tabs[1]:
                 st.subheader("2. Correlation Analysis: Popularity vs Audio Features")
                 st.info("**🔍 Key Questions:** Which audio feature best predicts commercial success? Are there threshold values that guarantee popularity? How do feature combinations create hit songs?")
@@ -646,8 +1058,7 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 3: Genre Analysis - ENHANCED
             # ---------------------------------------------------
-            st.divider()
-
+            
             with viz_tabs[2]:
                 st.subheader("3. Genre DNA: Audio Feature Signatures")
                 st.info("**🔍 Strategic Questions:** What is the unique 'DNA' of each genre? Which genres are converging in style? How can artists differentiate within saturated genres?")
@@ -719,7 +1130,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 4: Explicit Content Strategy Analysis
             # ---------------------------------------------------
-            st.divider()
             
             with viz_tabs[3]:
                 st.subheader("4. Explicit Content: Commercial Strategy Analysis")
@@ -763,7 +1173,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 5: Feature Correlation & Clustering
             # ---------------------------------------------------
-            st.divider()
             
             with viz_tabs[4]:
                 st.subheader("5. Feature Relationships: The Music Formula")
@@ -831,7 +1240,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 6: Temporal Strategy Analysis
             # ---------------------------------------------------
-            st.divider()
             
             with viz_tabs[5]:
                 st.subheader("6. Temporal Trends: Predicting the Future of Music")
@@ -890,7 +1298,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 7: Artist Success Patterns
             # ---------------------------------------------------
-            st.divider()
             
             with viz_tabs[6]:
                 st.subheader("7. Artist Success Patterns: One-Hit Wonder vs Consistency")
@@ -994,7 +1401,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 8: Interactive Feature Explorer - ENHANCED
             # ---------------------------------------------------
-            st.divider()
 
             with viz_tabs[7]:
                 st.subheader("8. Feature Interaction Explorer: Finding the Sweet Spot")
@@ -1094,7 +1500,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 9: Musical Key Strategy
             # ---------------------------------------------------
-            st.divider()
             
             with viz_tabs[8]:
                 st.subheader("9. Musical Key & Mode: The Emotional Blueprint")
@@ -1159,7 +1564,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 10: Decade Evolution Deep Dive
             # ---------------------------------------------------
-            st.divider()
 
             with viz_tabs[9]:
                 st.subheader("10. Decade Evolution: The Sound of Generations")
@@ -1213,7 +1617,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 11: Genre Popularity & Market Share
             # ---------------------------------------------------
-            st.divider()
 
             with viz_tabs[10]:
                 st.subheader("11. Genre Economics: Market Share & Commercial Viability")
@@ -1279,7 +1682,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 12: Tempo-Popularity Sweet Spots
             # ---------------------------------------------------
-            st.divider()
 
             with viz_tabs[11]:
                 st.subheader("12. The Tempo Formula: BPM Success Zones")
@@ -1348,7 +1750,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 13: Explicit Content Strategy Over Time
             # ---------------------------------------------------
-            st.divider()
 
             with viz_tabs[12]:
                 st.subheader("13. Explicit Content Evolution: Cultural Shifts & Commercial Impact")
@@ -1423,7 +1824,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 14: Popularity Lifecycle & Trends
             # ---------------------------------------------------
-            st.divider()
 
             with viz_tabs[13]:
                 st.subheader("14. The Popularity Lifecycle: Understanding Music Relevance")
@@ -1506,7 +1906,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 15: ARTIST EVOLUTION OVER TIME
             # ---------------------------------------------------
-            st.divider()
 
             with viz_tabs[14]:
                 st.subheader("15. Artist Evolution: The Rise and Fall of Music Icons")
@@ -2016,7 +2415,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 16: SONG TITLE ANALYTICS
             # ---------------------------------------------------
-            st.divider()
 
             with viz_tabs[15]:
                 st.subheader("16. The Power of Words: Song Title Analysis")
@@ -2159,7 +2557,6 @@ if music_data is not None:
             # ---------------------------------------------------
             # VIZ 17: COLLABORATION PATTERNS
             # ---------------------------------------------------
-            st.divider()
             
             with viz_tabs[16]:
                 st.subheader("17. Collaboration Economy: The Power of Features")
@@ -2285,7 +2682,6 @@ if music_data is not None:
                     optimal = team_size.loc[team_size['mean'].idxmax()]
                     st.success(f"**Optimal Team Size:** {int(optimal['artist_count'])} artist(s) with average popularity of {optimal['mean']:.1f}")
             
-                st.divider()
 
         else:       
             # Normal mode - load all visualizations sequentially
@@ -4238,7 +4634,7 @@ if music_data is not None:
     # --- TAB 3: AI Data Consultant ---
     # --------------------------------------------------------
     elif st.session_state.current_tab == "AI Consultant":
-        st.header("🤖 Music Data Consultant")
+        st.header("🧠 Music Data Consultant 💬")
         st.markdown("Ask complex questions about music trends, correlations, and patterns. The AI executes Python code to analyze the data.")
 
         if not IA_DISPONIVEL:
