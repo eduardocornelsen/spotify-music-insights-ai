@@ -1198,7 +1198,7 @@ if music_data is not None:
                 energy=("energy","mean"),
                 danceability=("danceability","mean"),
                 valence=("valence","mean"),
-                acousticness=("acousticness","mean"),S
+                acousticness=("acousticness","mean"),
                 instrumentalness=("instrumentalness","mean"),
                 speechiness=("speechiness","mean"),
                 liveness=("liveness","mean"),
