@@ -8,6 +8,9 @@ from pathlib import Path
 from scipy import stats
 from langchain.tools import tool
 import time
+import numpy as np
+from dataclasses import dataclass
+from streamlit_extras.stylable_container import stylable_container
 
 # --- Importações do LangChain (Tool Calling Agent) ---
 try:
@@ -21,11 +24,13 @@ except ImportError:
 except Exception:
     IA_DISPONIVEL = False
 
+
 # Read System Prompt from file
 system_prompt = Path("./prompts/system.txt").read_text()
 
 
 # --- PAGE CONFIG ---
+
 st.set_page_config(
     page_title="MusicInsights AI",
     page_icon="🎵",
@@ -77,19 +82,148 @@ def progress_bar_loading(message="Processing...", steps=100):
     status_text.empty()
 
 
+
 # --- CSS AND STYLING FUNCTIONS ---
 def apply_all_effects():
     """Apply all visual effects to the dashboard"""
     st.markdown("""
     <style>
         /* ============ SMOOTH SCROLLING ============ */
-        html, body, [data-testid="stAppViewContainer"], .main {
+    
+        /* Enable smooth scrolling globally */
+        html, body, [data-testid="stAppViewContainer"] {
             scroll-behavior: smooth;
         }
         
+        /* Main Content Area Scrolling */
+        .main {
+            scroll-behavior: smooth;
+            position: relative;
+        }
+        
+        /* Custom Scrollbar for Main Content */
+        .main::-webkit-scrollbar {
+            width: 12px;
+            background: transparent;
+        }
+        
+        .main::-webkit-scrollbar-track {
+            background: rgba(24, 24, 24, 0.5);
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        
+        .main::-webkit-scrollbar-thumb {
+            background: linear-gradient(to bottom, #1DB954, #1ED760);
+            border-radius: 10px;
+            border: 2px solid rgba(24, 24, 24, 0.5);
+            transition: all 0.3s ease;
+        }
+        
+        .main::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(to bottom, #1ED760, #22E868);
+            box-shadow: 0 0 15px rgba(29, 185, 84, 0.5);
+        }
+        
+        /* Scroll Progress Indicator */
+        .scroll-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #1DB954, #1ED760);
+            transform-origin: left;
+            animation: scrollProgress linear;
+            animation-timeline: scroll();
+            z-index: 9999;
+        }
+        
+        /* Parallax Effect for Headers */
+        h1, h2, h3 {
+            transition: transform 0.3s ease-out;
+        }
+        
+        /* Fade In on Scroll */
+        .element-container {
+            animation: fadeInUp 0.6s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Back to Top Button */
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #1DB954, #1ED760);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transform: translateY(100px);
+            transition: all 0.3s ease;
+            z-index: 999;
+            box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3);
+        }
+        
+        .back-to-top.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .back-to-top:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 25px rgba(29, 185, 84, 0.5);
+        }
+        
+        /* Smooth Anchor Links */
+        a[href^="#"] {
+            transition: all 0.3s ease;
+        }
+        
+        /* Section Transitions */
+        .stTabs [data-baseweb="tab-panel"] {
+            animation: tabFadeIn 0.5s ease;
+        }
+        
+        @keyframes tabFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Scroll Snap for Sections (Optional) */
+        .main > div {
+            scroll-snap-type: y proximity;
+        }
+        
+        .main > div > div[data-testid="stVerticalBlock"] > div {
+            scroll-snap-align: start;
+            scroll-margin-top: 20px;
+        }
+                        
         /* ============ NAVIGATION BUTTON STYLING (FIXED) ============ */
         
-        /* Grey buttons (default inactive state) - ALL sidebar buttons */
+        /* Grey buttons (default inactive state) - ONLY sidebar buttons */
         section[data-testid="stSidebar"] .stButton > button {
             background: #282828 !important;
             color: #B3B3B3 !important;
@@ -101,7 +235,7 @@ def apply_all_effects():
             width: 100%;
         }
         
-        /* Hover for inactive buttons */
+        /* Hover for inactive sidebar buttons */
         section[data-testid="stSidebar"] .stButton > button:hover {
             background: #404040 !important;
             color: #FFFFFF !important;
@@ -109,7 +243,7 @@ def apply_all_effects():
             border-color: #606060 !important;
         }
         
-        /* Green active buttons (primary) */
+        /* Green active buttons in sidebar (primary) */
         section[data-testid="stSidebar"] button[kind="primary"] {
             background: linear-gradient(135deg, #1DB954 0%, #1ED760 100%) !important;
             color: #000000 !important;
@@ -118,31 +252,61 @@ def apply_all_effects():
             box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3) !important;
         }
         
-        /* ============ OTHER BUTTON EFFECTS (for non-navigation) ============ */
-        .main .stButton > button {
-            background: linear-gradient(135deg, #1DB954 0%, #1ED760 100%);
-            color: #000000;
-            border: none;
-            border-radius: 500px;
-            font-weight: 700;
-            padding: 0.75rem 2rem;
-            transition: all 0.2s ease;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 4px 15px rgba(29, 185, 84, 0.2);
+        /* ============ MAIN CONTENT BUTTONS (INCLUDING AI CONSULTANT) ============ */
+        
+        /* All buttons in main area - GREEN by default */
+        .main .stButton > button,
+        [data-testid="stVerticalBlock"] .stButton > button,
+        .element-container .stButton > button {
+            background: linear-gradient(135deg, #1DB954 0%, #1ED760 100%) !important;
+            color: #000000 !important;
+            border: none !important;
+            border-radius: 500px !important;
+            font-weight: 700 !important;
+            padding: 0.75rem 2rem !important;
+            transition: all 0.2s ease !important;
+            position: relative !important;
+            overflow: hidden !important;
+            box-shadow: 0 4px 15px rgba(29, 185, 84, 0.2) !important;
         }
         
-        .main .stButton > button:hover {
-            transform: translateY(-2px) scale(1.02);
-            box-shadow: 0 7px 25px rgba(29, 185, 84, 0.4);
-            background: linear-gradient(135deg, #1ED760 0%, #22E868 100%);
+        /* Hover for main area buttons */
+        .main .stButton > button:hover,
+        [data-testid="stVerticalBlock"] .stButton > button:hover,
+        .element-container .stButton > button:hover {
+            transform: translateY(-2px) scale(1.02) !important;
+            box-shadow: 0 7px 25px rgba(29, 185, 84, 0.4) !important;
+            background: linear-gradient(135deg, #1ED760 0%, #22E868 100%) !important;
         }
         
-        /* ============ SIDEBAR EFFECTS WITH ANIMATION ============ */
+        /* Active/clicked state for main buttons */
+        .main .stButton > button:active,
+        [data-testid="stVerticalBlock"] .stButton > button:active {
+            transform: translateY(0) scale(0.98) !important;
+        }
+        
+        /* Ensure AI Consultant tab buttons are green and rounded */
+        .main button[key*="btn_"],
+        .main button[key*="custom_"] {
+            background: linear-gradient(135deg, #1DB954 0%, #1ED760 100%) !important;
+            color: #000000 !important;
+            border: none !important;
+            border-radius: 500px !important;
+            min-height: 45px !important;
+            font-weight: 600 !important;
+        }
+        
+        /* ============ SIDEBAR EFFECTS ============ */
+    
+        /* Animated Gradient Background */
         section[data-testid="stSidebar"] {
             background: linear-gradient(-45deg, #000000, #0a0a0a, #1a1a1a, #0f0f0f);
             background-size: 400% 400%;
             animation: gradientShift 15s ease infinite;
+            border-right: 2px solid transparent;
+            border-image: linear-gradient(to bottom, #1DB954, #1ED760, #1DB954);
+            border-image-slice: 1;
+            position: relative;
         }
         
         @keyframes gradientShift {
@@ -151,7 +315,30 @@ def apply_all_effects():
             100% { background-position: 0% 50%; }
         }
         
-        /* Sidebar headers with animated gradient */
+        /* Glowing Border Effect */
+        section[data-testid="stSidebar"]::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(to bottom, 
+                transparent,
+                #1DB954,
+                #1ED760,
+                #1DB954,
+                transparent
+            );
+            animation: borderGlow 3s linear infinite;
+        }
+        
+        @keyframes borderGlow {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        
+        /* Sidebar Header Animation */
         section[data-testid="stSidebar"] h1,
         section[data-testid="stSidebar"] h2,
         section[data-testid="stSidebar"] h3 {
@@ -163,7 +350,90 @@ def apply_all_effects():
         }
         
         @keyframes textShine {
-            to { background-position: 200% center; }
+            to {
+                background-position: 200% center;
+            }
+        }
+        
+        /* Sidebar Widgets Slide-in Effect */
+        section[data-testid="stSidebar"] .element-container {
+            animation: slideInLeft 0.5s ease-out;
+            transition: all 0.3s ease;
+        }
+        
+        section[data-testid="stSidebar"] .element-container:hover {
+            transform: translateX(5px);
+            background: rgba(29, 185, 84, 0.05);
+            border-left: 3px solid #1DB954;
+            padding-left: 10px;
+            margin-left: -10px;
+        }
+        
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        /* Expandable Sections with Smooth Animation */
+        section[data-testid="stSidebar"] .streamlit-expanderHeader {
+            background: linear-gradient(90deg, transparent, rgba(29, 185, 84, 0.1), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        section[data-testid="stSidebar"] .streamlit-expanderHeader:hover {
+            background: rgba(29, 185, 84, 0.2);
+            transform: scale(1.02);
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+        
+        /* Sidebar Scrollbar Custom */
+        section[data-testid="stSidebar"] > div:first-child {
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        
+        section[data-testid="stSidebar"]::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        section[data-testid="stSidebar"]::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 3px;
+        }
+        
+        section[data-testid="stSidebar"]::-webkit-scrollbar-thumb {
+            background: linear-gradient(to bottom, #1DB954, #1ED760);
+            border-radius: 3px;
+            transition: all 0.3s ease;
+        }
+        
+        section[data-testid="stSidebar"]::-webkit-scrollbar-thumb:hover {
+            background: #1ED760;
+            box-shadow: 0 0 10px rgba(29, 185, 84, 0.5);
+        }
+        
+        /* Navigation Items Hover Effect */
+        section[data-testid="stSidebar"] .stRadio > div {
+            background: transparent;
+            transition: all 0.3s ease;
+        }
+        
+        section[data-testid="stSidebar"] .stRadio > div:hover {
+            background: linear-gradient(90deg, transparent, rgba(29, 185, 84, 0.1));
+            border-radius: 10px;
         }
         
         /* ============ SCROLLBAR STYLING ============ */
@@ -237,26 +507,63 @@ def apply_all_effects():
         
         /* ============ SELECTBOX & RADIO EFFECTS ============ */
         .stSelectbox > div > div {
-            transition: all 0.2s ease;
+            background: rgba(24, 24, 24, 0.8);
             border: 2px solid transparent;
+            border-radius: 10px;
+            transition: all 0.3s ease;
         }
         
         .stSelectbox > div > div:hover {
             border-color: #1DB954;
-            box-shadow: 0 0 15px rgba(29, 185, 84, 0.2);
+            box-shadow: 0 0 20px rgba(29, 185, 84, 0.2);
+        }
+        
+        .stSelectbox > div > div:focus-within {
+            border-color: #1ED760;
+            box-shadow: 0 0 30px rgba(29, 185, 84, 0.3);
+            transform: scale(1.02);
         }
         
         .stRadio > div {
-            background: rgba(24, 24, 24, 0.3);
-            padding: 8px;
-            border-radius: 10px;
-            transition: all 0.2s ease;
+            display: flex;
+            gap: 10px;
+            padding: 5px;
+            background: rgba(24, 24, 24, 0.5);
+            border-radius: 25px;
         }
-        
+                
         .stRadio > div:hover {
             background: rgba(29, 185, 84, 0.1);
         }
+                
+        .stRadio > div > label {
+            background: transparent;
+            padding: 8px 16px;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+                
+        .stRadio > div > label:hover {
+            background: rgba(29, 185, 84, 0.1);
+            transform: scale(1.05);
+        }
+                
+        .stRadio > div > label[data-checked="true"] {
+            background: linear-gradient(135deg, #1DB954, #1ED760);
+            color: #000;
+            font-weight: bold;
+            animation: radioSelect 0.3s ease;
+        }
         
+        @keyframes radioSelect {
+            0% { transform: scale(0.9); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+               
         /* ============ EXPANDER EFFECTS ============ */
         .streamlit-expanderHeader {
             transition: all 0.2s ease;
@@ -296,6 +603,36 @@ def apply_all_effects():
             to { opacity: 1; }
         }
     </style>
+                
+    <!-- Add Scroll Progress Bar -->
+    <div class="scroll-progress"></div>
+
+    <!-- Add Back to Top Button -->
+    <div class="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+        ⬆
+    </div>
+
+    <script>
+        // Show/Hide Back to Top Button
+        window.addEventListener('scroll', function() {
+            const backToTop = document.querySelector('.back-to-top');
+            if (window.scrollY > 300) {
+                backToTop.classList.add('visible');
+            } else {
+                backToTop.classList.remove('visible');
+            }
+        });
+        
+        // Update scroll progress
+        window.addEventListener('scroll', function() {
+            const scrollProgress = document.querySelector('.scroll-progress');
+            const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const scrollPercent = (window.scrollY / scrollHeight) * 100;
+            if (scrollProgress) {
+                scrollProgress.style.transform = `scaleX(${scrollPercent / 100})`;
+            }
+        });
+    </script>
     
     <!-- Scroll to top button -->
     <a href="#" id="scrollTop" style="
@@ -465,155 +802,123 @@ if 'current_tab' not in st.session_state:
 
 
 # --- Sidebar Navigation ---
-st.sidebar.image(spotify_logo_url, width=120)
-st.sidebar.markdown("""
-<h2 style='color: #1DB954; margin-bottom: 20px;'>MusicInsights AI</h2>
-""", unsafe_allow_html=True)
 
+header_html = f"""
+<div style="
+    display: flex;           /* Creates the side-by-side layout */
+    align-items: center;     /* This is the correct vertical alignment! */
+    margin-bottom: 20px;     /* Matches your original margin-bottom */
+">
+    <img src="{spotify_logo_url}" width="80" style="margin-right: 15px;">
+    
+    <h2 style='color: #1DB954; margin: 0; padding: 0;'>
+        MusicInsights AI
+    </h2>
+</div>
+"""
+
+st.sidebar.html(header_html) 
+
+# Navigation Section
 st.sidebar.markdown("### 🎵 Navigation")
 
+# All navigation tabs treated equally
 tabs = ["AI Consultant", "Dashboard", "Insights", "Data Explorer"]
 
-for i, tab in enumerate(tabs):
+for tab in tabs:
     is_active = st.session_state.current_tab == tab
     
-    # Special handling for AI Consultant (first button, index 0)
-    if tab == "AI Consultant" and not is_active:
-        # Apply white style using a unique class identifier
-        st.sidebar.markdown(f"""
-        <style>
-            button[key="nav_AI_Consultant"]:not([kind="primary"]) {{
-                background: #FFFFFF !important;
-                color: #121212 !important;
-                border: 2px solid #1DB954 !important;
-                font-weight: 700 !important;
-            }}
-            button[key="nav_AI_Consultant"]:not([kind="primary"]):hover {{
-                background: #F0F0F0 !important;
-                box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3) !important;
-            }}
-        </style>
-        """, unsafe_allow_html=True)
-    
-    # Button creation
+    # Set icon for each tab
     if tab == "AI Consultant":
-        button_label = f"🧠 {tab} 💬"
+        icon = "🧠"
+        label = f"{icon} {tab} 💬"
     else:
-        icon = {'Dashboard': '📊', 'Insights': '💡', 'Data Explorer': '📁'}.get(tab, '📄')
-        button_label = f"{icon} {tab}"
+        icon_map = {
+            "Dashboard": "📊",
+            "Insights": "💡",
+            "Data Explorer": "📁"
+        }
+        icon = icon_map.get(tab, "📄")
+        label = f"{icon} {tab}"
     
+    # Create button - same style for all
     if st.sidebar.button(
-        button_label,
+        label,
         key=f"nav_{tab.replace(' ', '_')}",
         use_container_width=True,
         type="primary" if is_active else "secondary"
     ):
         st.session_state.current_tab = tab
         st.rerun()
+
+# Show active indicator for AI Assistant
+if st.session_state.current_tab == "AI Consultant":
+    st.sidebar.markdown("""
+    <div style='
+        background: linear-gradient(135deg, #1DB954 0%, #1ED760 100%);
+        padding: 10px; 
+        border-radius: 8px; 
+        margin: 10px 0;
+        animation: pulse 2s infinite;
+    '>
+        <p style='color: black; font-weight: bold; margin: 0; text-align: center;'>
+            🤖 AI Assistant Active
+        </p>
+    </div>
+    <style>
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.02); opacity: 0.9; }
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.sidebar.markdown("---")
             
 
 # ADD DATASET STATS 
 
 def display_sidebar_stats(music_data, df_filtered=None):
-    """Display dynamic statistics in sidebar using consistent data sources."""
-    
-    # --- Base stats from the main data dictionary ---
     total_tracks = len(music_data['main'])
-    total_artists = len(music_data['by_artist'])
-    total_genres = len(music_data['by_genres'])
-    
-    # --- Calculate stats for the *current* view ---
-    if df_filtered is not None and len(df_filtered) > 0:
-        # Use filtered data
-        current_df = df_filtered
-        current_tracks = len(current_df)
-    else:
-        # Use original data
-        current_df = music_data['main']
-        current_tracks = total_tracks
-    
-    # Calculate stats from the *current* dataframe
-    # Note: These are now consistent, whether filtered or not
-    current_years = f"{current_df['year'].min()}-{current_df['year'].max()}"
-    current_artists = current_df['artists'].nunique() # This might be different from total_artists if your 'artists' column is complex
-    avg_popularity = current_df['popularity'].mean()
-    explicit_count = current_df['explicit'].sum()
+    current_df = df_filtered if df_filtered is not None else music_data['main']
+    current_tracks = len(current_df)
+    percentage = (current_tracks / total_tracks * 100) if total_tracks else 0
 
-    percentage = (current_tracks / total_tracks) * 100 if total_tracks > 0 else 0
-    
-    st.sidebar.html(f"""
-    <div style="
-        background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
-        border: 2px solid #1DB954;
-        border-radius: 12px;
-        padding: 15px;
-        margin: 10px 0;
-        box-shadow: 0 4px 12px rgba(29, 185, 84, 0.2);
-    ">
-        <h4 style="
-            color: #1DB954; 
-            margin: 0 0 10px 0;
-            font-size: 16px;
-            text-align: center;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        ">📊 Active Dataset</h4>
-        
-        <div style="
-            text-align: center;
-            padding: 10px;
-            background: #0a0a0a;
-            border-radius: 8px;
-            margin-bottom: 10px;
-        ">
-            <div style="color: #1DB954; font-size: 32px; font-weight: bold;">
-                {current_tracks:,}
-            </div>
-            <div style="color: #888; font-size: 12px;">
-                tracks selected ({percentage:.0f}%)
-            </div>
+    if current_tracks:
+        years = f"{int(current_df['year'].min())}-{int(current_df['year'].max())}"
+        artists = current_df['artists'].nunique()
+        avg_pop = current_df['popularity'].mean()
+        explicit_count = int(current_df['explicit'].sum()) if 'explicit' in current_df.columns else 0
+    else:
+        years, artists, avg_pop, explicit_count = "N/A", 0, 0, 0
+
+    st.sidebar.markdown(f"""
+    <div style="background: linear-gradient(135deg, #1a1a1a, #2a2a2a); border: 2px solid #1DB954; border-radius: 12px; padding: 15px; margin: 10px 0;">
+      <h4 style="color:#1DB954; margin:0 0 10px 0; text-align:center;">📊 Active Dataset</h4>
+      <div style="text-align:center; padding:10px; background:#0a0a0a; border-radius:8px; margin-bottom:10px;">
+        <div style="color:#1DB954; font-size:28px; font-weight:bold;">{current_tracks:,}</div>
+        <div style="color:#888; font-size:12px;">tracks selected ({percentage:.0f}%)</div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+        <div style="background:#0a0a0a; padding:8px; border-radius:6px; text-align:center;">
+          <div style="color:#1DB954; font-weight:bold;">{years}</div>
+          <div style="color:#666; font-size:10px;">Years</div>
         </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-            <div style="
-                background: #0a0a0a;
-                padding: 8px;
-                border-radius: 6px;
-                text-align: center;
-            ">
-                <div style="color: #1DB954; font-weight: bold;">{current_years}</div>
-                <div style="color: #666; font-size: 10px;">Years</div>
-            </div>
-            <div style="
-                background: #0a0a0a;
-                padding: 8px;
-                border-radius: 6px;
-                text-align: center;
-            ">
-                <div style="color: #1DB954; font-weight: bold;">{current_artists:,}</div>
-                <div style="color: #666; font-size: 10px;">Artists</div>
-            </div>
-            <div style="
-                background: #0a0a0a;
-                padding: 8px;
-                border-radius: 6px;
-                text-align: center;
-            ">
-                <div style="color: #1DB954; font-weight: bold;">{avg_popularity:.0f}</div>
-                <div style="color: #666; font-size: 10px;">Avg Pop</div>
-            </div>
-            <div style="
-                background: #0a0a0a;
-                padding: 8px;
-                border-radius: 6px;
-                text-align: center;
-            ">
-                <div style="color: #1DB954; font-weight: bold;">{explicit_count:,}</div>
-                <div style="color: #666; font-size: 10px;">Explicit</div>
-            </div>
+        <div style="background:#0a0a0a; padding:8px; border-radius:6px; text-align:center;">
+          <div style="color:#1DB954; font-weight:bold;">{artists:,}</div>
+          <div style="color:#666; font-size:10px;">Artists</div>
         </div>
+        <div style="background:#0a0a0a; padding:8px; border-radius:6px; text-align:center;">
+          <div style="color:#1DB954; font-weight:bold;">{avg_pop:.0f}</div>
+          <div style="color:#666; font-size:10px;">Avg Pop</div>
+        </div>
+        <div style="background:#0a0a0a; padding:8px; border-radius:6px; text-align:center;">
+          <div style="color:#1DB954; font-weight:bold;">{explicit_count:,}</div>
+          <div style="color:#666; font-size:10px;">Explicit</div>
+        </div>
+      </div>
     </div>
-    """)
+    """, unsafe_allow_html=True)
 
 
 # --------------------------------------------------------
@@ -649,11 +954,11 @@ def PythonCodeExecutor(code: str) -> str:
             return "ERROR: Datasets not loaded."
 
         # Expose SAFE copies of DataFrames
-        df_tracks = music_data["df_tracks"].copy()
-        df_year = music_data["df_year"].copy()
-        df_artist = music_data["df_artist"].copy()
-        df_genres = music_data["df_genres"].copy()
-        df_w_genres = music_data["df_w_genres"].copy()
+        df_tracks = music_data["main"].copy()
+        df_year = music_data["by_year"].copy()
+        df_artist = music_data["by_artist"].copy()
+        df_genres = music_data["by_genres"].copy()
+        df_w_genres = music_data["with_genres"].copy()
 
         # Default 'df' alias to tracks-level dataset
         df = df_tracks
@@ -704,9 +1009,8 @@ if music_data is not None:
     df['decade'] = (df['year'] // 10) * 10
     
     # --- Key Mapping ---
-    key_mapping = {0: 'C', 1: 'C#', 2: 'D', 3: 'D#', 4: 'E', 5: 'F',
-                   6: 'F#', 7: 'G', 8: 'G#', 9: 'A', 10: 'A#', 11: 'B'}
-    key_options = list(key_mapping.values())
+    KEY_MAP = {0:'C',1:'C#',2:'D',3:'D#',4:'E',5:'F',6:'F#',7:'G',8:'G#',9:'A',10:'A#',11:'B'}
+    key_options = list(KEY_MAP.values())
 
     # ---------------------------------------------------
     # GLOBAL FILTERS IN SIDEBAR
@@ -771,39 +1075,140 @@ if music_data is not None:
                 artist2 = st.selectbox("Second Artist", artist_list, key="artist2")
                 st.session_state.compare_items = (artist1, artist2)
     
-    selected_key_numbers = [k for k, v in key_mapping.items() if v in key_filter_names]
+    selected_key_numbers = [k for k, v in KEY_MAP.items() if v in key_filter_names]
 
-    @st.cache_data 
-    def get_filtered_data(df, decade_range, pop_range, explicit, keys):
-        """Filters the main DataFrame based on global selections."""
-        df_filtered = df.copy()
-        
-        if decade_range:
-            df_filtered = df_filtered[
-                (df_filtered['decade'] >= decade_range[0]) & 
-                (df_filtered['decade'] <= decade_range[1])
-            ]
-        
-        df_filtered = df_filtered[(df_filtered['popularity'] >= pop_range[0]) & 
-                                  (df_filtered['popularity'] <= pop_range[1])]
-        
-        if explicit == "Clean Only":
-            df_filtered = df_filtered[df_filtered['explicit'] == 0]
-        elif explicit == "Explicit Only":
-            df_filtered = df_filtered[df_filtered['explicit'] == 1]
-        
-        if keys:
-            df_filtered = df_filtered[df_filtered['key'].isin(keys)]
-            
-        return df_filtered
+    # --- Global filtering primitives ---
+    @dataclass(frozen=True)
+    class FilterState:
+        decade_start: int
+        decade_end: int
+        pop_min: int
+        pop_max: int
+        explicit: str        # "All", "Clean Only", "Explicit Only"
+        keys: tuple[int, ...]  # musical keys as ints
 
-    df_filtered = get_filtered_data(
-        df, 
-        decade_range,
-        popularity_range, 
-        explicit_filter, 
-        selected_key_numbers
+    @st.cache_data(show_spinner=False)
+    def filter_tracks(df: pd.DataFrame, f: FilterState) -> pd.DataFrame:
+        q = df[(df["decade"] >= f.decade_start) & (df["decade"] <= f.decade_end)]
+        q = q[(q["popularity"] >= f.pop_min) & (q["popularity"] <= f.pop_max)]
+        if f.explicit == "Clean Only":
+            q = q[q["explicit"] == 0]
+        elif f.explicit == "Explicit Only":
+            q = q[q["explicit"] == 1]
+        if f.keys:
+            q = q[q["key"].isin(f.keys)]
+        return q
+
+    # Build FilterState from sidebar widgets
+    filters = FilterState(
+        decade_start=decade_range[0],
+        decade_end=decade_range[1],
+        pop_min=popularity_range[0],
+        pop_max=popularity_range[1],
+        explicit=explicit_filter,
+        keys=tuple(sorted(selected_key_numbers))
     )
+
+    df_filtered = filter_tracks(df, filters)
+
+    # --- Aggregators (respect current filters) ---
+    @st.cache_data(show_spinner=False)
+    def aggregate_by_year(df_tracks: pd.DataFrame) -> pd.DataFrame:
+        if df_tracks.empty:
+            return pd.DataFrame(columns=["year","popularity","energy","danceability","valence","acousticness","instrumentalness","speechiness","liveness","loudness","tempo","duration_ms"])
+        agg = (df_tracks.groupby("year", as_index=False)
+            .agg(popularity=("popularity","mean"),
+                energy=("energy","mean"),
+                danceability=("danceability","mean"),
+                valence=("valence","mean"),
+                acousticness=("acousticness","mean"),
+                instrumentalness=("instrumentalness","mean"),
+                speechiness=("speechiness","mean"),
+                liveness=("liveness","mean"),
+                loudness=("loudness","mean"),
+                tempo=("tempo","mean"),
+                duration_ms=("duration_ms","mean")))
+        return agg
+
+    @st.cache_data(show_spinner=False)
+    def aggregate_by_artist(df_tracks: pd.DataFrame) -> pd.DataFrame:
+        if df_tracks.empty:
+            return pd.DataFrame(columns=["artist_clean","popularity","energy","valence","count"])
+        d = df_tracks.copy()
+        d["artist_clean"] = (d["artists"]
+            .str.replace(r"[\[\]'\"]", "", regex=True)
+            .str.split(",").str[0].str.strip())
+        agg = (d.groupby("artist_clean", as_index=False)
+            .agg(popularity=("popularity","mean"),
+                energy=("energy","mean"),
+                valence=("valence","mean"),
+                count=("name","count")))
+        return agg
+
+    @st.cache_data(show_spinner=False)
+    def align_genre_frame(df_w_genres: pd.DataFrame, f: FilterState) -> pd.DataFrame:
+        g = df_w_genres.copy()
+        # Apply what we can (may not have explicit/key in this table)
+        if "decade" in g.columns:
+            g = g[(g["decade"] >= f.decade_start) & (g["decade"] <= f.decade_end)]
+        if "popularity" in g.columns:
+            g = g[(g["popularity"] >= f.pop_min) & (g["popularity"] <= f.pop_max)]
+        if "explicit" in g.columns and f.explicit != "All":
+            want = 0 if f.explicit == "Clean Only" else 1
+            g = g[g["explicit"] == want]
+        return g
+
+    @st.cache_data(show_spinner=False)
+    def aggregate_by_genre(df_w_genres_filtered: pd.DataFrame) -> pd.DataFrame:
+        if df_w_genres_filtered.empty:
+            return pd.DataFrame(columns=["genres","popularity","energy","danceability","valence","acousticness","speechiness","tempo"])
+        agg = (df_w_genres_filtered.groupby("genres", as_index=False)
+            .agg(popularity=("popularity","mean"),
+                energy=("energy","mean"),
+                danceability=("danceability","mean"),
+                valence=("valence","mean"),
+                acousticness=("acousticness","mean"),
+                speechiness=("speechiness","mean"),
+                tempo=("tempo","mean")))
+        return agg
+    
+    def render_evolution(df_filtered: pd.DataFrame):
+        st.subheader("1. Evolution of ALL Audio Features Over Decades")
+
+        df_year_f = aggregate_by_year(df_filtered)
+
+        features = ['danceability','energy','valence','acousticness','instrumentalness','speechiness','liveness','loudness']
+        selected = st.multiselect("Select Audio Features:", features, default=features, key="evo_features")
+        normalize = st.checkbox("Normalize", value=False, key="evo_normalize")
+        compare = st.checkbox("Compare two decades", value=False, key="evo_compare")
+
+        base = df_year_f[["year"] + selected].copy()
+        if normalize:
+            for c in selected:
+                rng = base[c].max() - base[c].min()
+                base[c] = 0 if rng == 0 else (base[c] - base[c].min()) / rng
+
+        if compare:
+            decades = sorted(df_filtered["decade"].unique().tolist())
+            if len(decades) < 2:
+                st.info("Not enough decades in the current selection to compare.")
+                return
+            d1 = st.selectbox("First decade", decades, index=max(0, len(decades)-2), key="evo_d1")
+            d2 = st.selectbox("Second decade", decades, index=max(0, len(decades)-1), key="evo_d2")
+
+            summary = (df_filtered[df_filtered["decade"].isin([d1, d2])]
+                    .assign(group=lambda x: x["decade"].astype(str))
+                    .groupby(["group","year"], as_index=False)[selected].mean())
+            melted = summary.melt(id_vars=["group","year"], var_name="Feature", value_name="Value")
+            fig = px.line(melted, x="year", y="Value", color="Feature", line_dash="group",
+                        title="Evolution (comparison by decade)", template="plotly_dark")
+        else:
+            melted = base.melt(id_vars=["year"], var_name="Feature", value_name="Value")
+            fig = px.line(melted, x="year", y="Value", color="Feature",
+                        title="Evolution of Audio Features (1920-2020)", template="plotly_dark")
+
+        st.plotly_chart(fig, use_container_width=True)
+
 
 if music_data is not None:
     st.sidebar.markdown("---")
@@ -818,6 +1223,7 @@ if music_data is not None:
     
     st.sidebar.markdown("---")
         
+
     # --------------------------------------------------------
     # TAB 1: DASHBOARD
     # --------------------------------------------------------
@@ -859,6 +1265,46 @@ if music_data is not None:
         
         st.divider()
         
+        with st.expander("How to interact", expanded=True):
+            st.markdown("""
+            - Use the Global Filters in the sidebar to subset the dataset.
+            - Each visualization offers its own comparison mode when relevant.
+            - On mobile, scroll horizontally when needed.
+            - This page loads only the selected visualization for speed.
+            """)
+
+        viz_map = {
+            "📈 Evolution of Features": "evo",
+            "📊 Popularity vs Features": "corr",
+            "🎸 Genre DNA": "genre",
+            "🔞 Explicit Strategy": "explicit",
+            "📈 Explicit Over Time": "explicit_time",
+            "🔗 Temporal Trends": "temporal",
+            "👤 Artist Success Patterns": "artists",
+            "🔍 Feature Explorer": "explorer",
+            "🎵 Key & Mode": "keys",
+            "📅 Decade Evolution": "decades",
+            "💰 Genre Economics": "genre_econ",
+            "⏱️ Tempo Zones": "tempo",
+            "🌟 Popularity Lifecycle": "pop_lifecycle",
+            "🚀 Artist Evolution": "artist_evo",
+            "💬 Title Analytics": "titles",
+            "🤝 Collaboration Patterns": "collab",
+        }
+
+        selected_viz = st.selectbox("Choose a visualization", list(viz_map.keys()), key="viz_picker")
+
+        if selected_viz == "📈 Evolution of Features":
+            render_evolution(df_filtered)
+        elif selected_viz == "📊 Popularity vs Features":
+            render_correlation(df_filtered)
+            
+            # placeholder for now; we’ll wire this soon
+            st.info("Temporal Trends will be wired next.")
+        else:
+            st.info("This visualization will be wired next. Try 'Evolution of Features'.")
+
+            
         # Performance Mode Toggle
         col_perf1, col_perf2 = st.columns([1, 4])
         with col_perf1:
@@ -904,7 +1350,9 @@ if music_data is not None:
                 "💬 Titles", "🤝 Collaborations"
             ])
 
-        # Show selected content
+
+
+            # Show selected content
         
             # ---------------------------------------------------
             # VIZ 1: Audio Features Over Time - ALL FEATURES
@@ -912,70 +1360,37 @@ if music_data is not None:
             
             with viz_tabs[0]:
                 st.subheader("1. Evolution of ALL Audio Features Over Decades")
-                st.info("**🔍 Key Question:** How have ALL musical characteristics evolved? Which features show the most dramatic changes, indicating major shifts in music production and consumer preferences?")
-                
-                # Select which features to display
-                all_audio_features = ['danceability', 'energy', 'valence', 'acousticness', 
-                                    'instrumentalness', 'speechiness', 'liveness', 'loudness']
-                
-                selected_features_viz1 = st.multiselect(
-                    "Select Audio Features to Display:",
-                    options=all_audio_features,
-                    default=all_audio_features,
-                    key="features_selector_viz1"
-                )
-                
-                # Toggle for normalized view
-                normalize_features = st.checkbox("Normalize features for better comparison", value=False, key="normalize_viz1")
-                
-                # Prepare data for time series
-                features_cols = ['year'] + selected_features_viz1
-                features_over_time = df_year[features_cols].copy()
-                
-                if normalize_features:
-                    for feat in selected_features_viz1:
-                        features_over_time[feat] = (features_over_time[feat] - features_over_time[feat].min()) / \
-                                                (features_over_time[feat].max() - features_over_time[feat].min())
-                
-                features_melted = features_over_time.melt(
-                    id_vars=['year'],
-                    var_name='Feature',
-                    value_name='Value'
-                )
-                
-                fig_evolution = px.line(
-                    features_melted,
-                    x='year',
-                    y='Value',
-                    color='Feature',
-                    title='Evolution of Audio Features (1920-2020)',
-                    labels={'Value': 'Feature Value' + (' (Normalized)' if normalize_features else ' (0-1)'), 
-                        'year': 'Year'},
-                    template='plotly_dark'
-                )
-                
-                # Update layout for Spotify theme
-                fig_evolution.update_layout(
-                    plot_bgcolor='#181818',
-                    paper_bgcolor='#181818',
-                    font_color='#B3B3B3'
-                )
-                
-                # Add annotations for major music eras
-                music_eras = [
-                    (1955, "Rock'n'Roll Era"),
-                    (1975, "Disco Era"),
-                    (1985, "MTV Era"),
-                    (1995, "Hip-Hop Rise"),
-                    (2005, "Digital/Streaming Era")
-                ]
-                
-                for year, era in music_eras:
-                    fig_evolution.add_vline(x=year, line_dash="dash", line_color="gray", opacity=0.3)
-                    fig_evolution.add_annotation(x=year, y=0.9, text=era, showarrow=False, 
-                                                textangle=-90, font=dict(size=10, color="gray"))
-                
-                st.plotly_chart(fig_evolution, use_container_width=True)
+                compare = st.checkbox("Compare two decades", value=False, key="cmp_evo")
+                df_year_f = aggregate_by_year(df_filtered)
+
+                features = ['danceability','energy','valence','acousticness','instrumentalness','speechiness','liveness','loudness']
+                selected = st.multiselect("Select Audio Features:", features, default=features)
+                normalize = st.checkbox("Normalize", value=False)
+
+                base = df_year_f[["year"] + selected].copy()
+                if normalize:
+                    for c in selected:
+                        rng = base[c].max() - base[c].min()
+                        base[c] = 0 if rng == 0 else (base[c] - base[c].min()) / rng
+
+                if compare:
+                    decades = sorted((df_filtered["decade"]).unique().tolist())
+                    d1 = st.selectbox("First decade", decades, index=max(0, len(decades)-2))
+                    d2 = st.selectbox("Second decade", decades, index=max(0, len(decades)-1))
+
+                    # show average lines as markers for the two selected decades
+                    summary = (df_filtered[df_filtered["decade"].isin([d1, d2])]
+                            .assign(group=lambda x: x["decade"].astype(str))
+                            .groupby(["group","year"], as_index=False)[selected].mean())
+                    melted = summary.melt(id_vars=["group","year"], var_name="Feature", value_name="Value")
+                    fig = px.line(melted, x="year", y="Value", color="Feature", line_dash="group",
+                                title="Evolution (comparison by decade)", template="plotly_dark")
+                else:
+                    melted = base.melt(id_vars=["year"], var_name="Feature", value_name="Value")
+                    fig = px.line(melted, x="year", y="Value", color="Feature",
+                                title="Evolution of Audio Features (1920-2020)", template="plotly_dark")
+
+                st.plotly_chart(fig, use_container_width=True)
             
             # ---------------------------------------------------
             # VIZ 2: Popularity vs Audio Features - ENHANCED
@@ -1005,7 +1420,7 @@ if music_data is not None:
                     add_percentiles = st.checkbox("Show percentile lines", value=False, key="percentiles_viz2")
                 
                 # Sample for better performance
-                df_sample = df_filtered.sample(min(5000, len(df_filtered)))
+                df_sample = df_filtered.sample(min(5000, len(df_filtered)), random_state=42)
                 
                 if viz2_type == "Scatter with Trend":
                     fig_correlation = px.scatter(
@@ -1248,25 +1663,26 @@ if music_data is not None:
                 col_tempo1, col_tempo2 = st.columns(2)
                 
                 # Convert duration to minutes BEFORE using it
-                df_year['duration_min'] = df_year['duration_ms'] / 60000
+                df_year_f = aggregate_by_year(df_filtered)
+                df_year_f["duration_min"] = df_year_f["duration_ms"] / 60000.0
+
                 
                 with col_tempo1:
                     # Add trend prediction toggle
                     show_prediction = st.checkbox("Show trend projection", value=False, key="prediction_duration")
                     
                     fig_duration = px.line(
-                        df_year[df_year['year'] >= 1960],
-                        x='year',
-                        y='duration_min',
-                        title='Song Duration: The Attention Span Crisis',
-                        labels={'duration_min': 'Duration (minutes)', 'year': 'Year'}
+                        df_year_f[df_year_f["year"] >= 1960],
+                        x="year", y="duration_min",
+                        title="Song Duration: The Attention Span Crisis",
+                        labels={"duration_min": "Duration (minutes)", "year": "Year"}
                     )
                     
                     if show_prediction:
                         # Simple linear projection
                         try:
                             from scipy import stats
-                            recent_years = df_year[df_year['year'] >= 2000].copy()
+                            recent_years = df_year_f[df_year_f['year'] >= 2000].copy()
                             
                             # Make sure duration_min is calculated for recent_years
                             if 'duration_min' not in recent_years.columns:
@@ -1287,7 +1703,7 @@ if music_data is not None:
                 with col_tempo2:
                                 
                     fig_tempo = px.line(
-                        df_year[df_year['year'] >= 1960],
+                        df_year_f[df_year_f['year'] >= 1960],
                         x='year',
                         y='tempo',
                         title='Tempo Evolution: The BPM Arms Race',
@@ -1444,7 +1860,7 @@ if music_data is not None:
                 # Filter data
                 df_density = df_filtered[(df_filtered['decade'] >= decade_filter_8[0]) & 
                                         (df_filtered['decade'] <= decade_filter_8[1])]
-                df_density_sample = df_density.sample(min(10000, len(df_density)))
+                df_density_sample = df_density.sample(min(10000, len(df_density)), random_state=42)
                 
                 if viz_style == "Density Heatmap":
                     fig_density = px.density_heatmap(
@@ -1631,7 +2047,10 @@ if music_data is not None:
                 
                 if genre_view == "Top Genres by Popularity":
                     # Get top 20 genres by popularity
-                    top_genres_pop = df_genres.nlargest(20, 'popularity')[['genres', 'popularity']]
+                    gframe = align_genre_frame(music_data["with_genres"], filters)
+                    df_genres_f = aggregate_by_genre(gframe)
+
+                    top_genres_pop = df_genres_f.nlargest(20, "popularity")[["genres","popularity"]]
                     
                     fig_top_genres = px.bar(
                         top_genres_pop,
@@ -1764,8 +2183,10 @@ if music_data is not None:
                 
                 if explicit_view == "Timeline":
                     # Group by year and explicit
-                    explicit_years = df[df['year'] >= 1960].groupby(['year', 'explicit']).size().reset_index(name='count')
-                    explicit_years['explicit_label'] = explicit_years['explicit'].map({0: 'Clean', 1: 'Explicit'})
+                    explicit_years = (df_filtered[df_filtered["year"] >= 1960]
+                                    .groupby(["year","explicit"])
+                                    .size().reset_index(name="count"))
+                    explicit_years["explicit_label"] = explicit_years["explicit"].map({0:"Clean",1:"Explicit"})
                     
                     fig_explicit_years = px.area(
                         explicit_years,
@@ -1837,7 +2258,7 @@ if music_data is not None:
                 )
                 
                 # Filter for recent years with enough data
-                popularity_trend = df_year[df_year['year'] >= 1920][['year', 'popularity']]
+                popularity_trend = df_year_f[df_year_f['year'] >= 1920][['year', 'popularity']]
                 
                 if popularity_view == "Overall Trend":
                     fig_pop_trend = px.line(
@@ -2024,18 +2445,41 @@ if music_data is not None:
                     
                     # Show summary statistics
                     col_stat1, col_stat2, col_stat3 = st.columns(3)
+                    # Most Consistent Artist
                     with col_stat1:
-                        most_consistent = artist_metrics_filtered.groupby('artist_clean').size().idxmax()
-                        appearances = artist_metrics_filtered.groupby('artist_clean').size().max()
-                        st.metric("Most Consistent Artist", most_consistent[:25], f"{appearances} periods")
+                        if artist_metrics_filtered.empty:
+                            st.metric("Most Consistent Artist", "N/A", "No data")
+                        else:
+                            counts_by_artist = artist_metrics_filtered.groupby('artist_clean').size()
+                            if counts_by_artist.empty:
+                                st.metric("Most Consistent Artist", "N/A", "No data")
+                            else:
+                                most_consistent = counts_by_artist.idxmax()
+                                appearances = int(counts_by_artist.max())
+                                st.metric("Most Consistent Artist", most_consistent[:25], f"{appearances} periods")
+
+                    # Peak metric (handle empty and NaNs)
                     with col_stat2:
-                        peak_artist = artist_metrics_filtered.loc[artist_metrics_filtered[metric_col].idxmax(), 'artist_clean']
-                        peak_value = artist_metrics_filtered[metric_col].max()
-                        st.metric(f"Peak {metric_label}", peak_artist[:25], f"{peak_value:.1f}")
+                        if artist_metrics_filtered.empty or artist_metrics_filtered[metric_col].dropna().empty:
+                            st.metric(f"Peak {metric_label}", "N/A", "No data")
+                        else:
+                            peak_row = artist_metrics_filtered.loc[artist_metrics_filtered[metric_col].idxmax()]
+                            peak_artist = str(peak_row['artist_clean'])
+                            peak_value = float(peak_row[metric_col])
+                            st.metric(f"Peak {metric_label}", peak_artist[:25], f"{peak_value:.1f}")
+
+                    # Current Leader
                     with col_stat3:
-                        recent_period = artist_metrics_filtered['time_period'].max()
-                        recent_top = artist_metrics_filtered[artist_metrics_filtered['time_period'] == recent_period].nlargest(1, metric_col)['artist_clean'].values[0] if len(artist_metrics_filtered[artist_metrics_filtered['time_period'] == recent_period]) > 0 else "N/A"
-                        st.metric("Current Leader", recent_top[:25], f"In {recent_period}")
+                        if artist_metrics_filtered.empty or artist_metrics_filtered['time_period'].dropna().empty:
+                            st.metric("Current Leader", "N/A", "")
+                        else:
+                            recent_period = artist_metrics_filtered['time_period'].max()
+                            recent_df = artist_metrics_filtered[artist_metrics_filtered['time_period'] == recent_period]
+                            if recent_df.empty or recent_df[metric_col].dropna().empty:
+                                st.metric("Current Leader", "N/A", "")
+                            else:
+                                recent_top = recent_df.nlargest(1, metric_col)['artist_clean'].values[0]
+                                st.metric("Current Leader", str(recent_top)[:25], f"In {recent_period}")
 
                 elif artist_time_analysis == "Artist Dominance by Decade":
                     # Analyze which artists dominated each decade
@@ -2683,7 +3127,8 @@ if music_data is not None:
                     st.success(f"**Optimal Team Size:** {int(optimal['artist_count'])} artist(s) with average popularity of {optimal['mean']:.1f}")
             
 
-        else:       
+        else:
+            st.stop()       
             # Normal mode - load all visualizations sequentially
             # ---------------------------------------------------
             # VIZ 1: Audio Features Over Time - ALL FEATURES
@@ -2708,8 +3153,10 @@ if music_data is not None:
             
             # Prepare data for time series
             features_cols = ['year'] + selected_features_viz1
-            features_over_time = df_year[features_cols].copy()
-            
+
+            df_year_f = aggregate_by_year(df_filtered)
+            features_over_time = df_year_f[["year"] + selected_features_viz1].copy()
+
             if normalize_features:
                 for feat in selected_features_viz1:
                     features_over_time[feat] = (features_over_time[feat] - features_over_time[feat].min()) / \
@@ -3026,25 +3473,26 @@ if music_data is not None:
             col_tempo1, col_tempo2 = st.columns(2)
             
             # Convert duration to minutes BEFORE using it
-            df_year['duration_min'] = df_year['duration_ms'] / 60000
+            df_year_f = aggregate_by_year(df_filtered)
+            df_year_f["duration_min"] = df_year_f["duration_ms"] / 60000.0
+
             
             with col_tempo1:
                 # Add trend prediction toggle
                 show_prediction = st.checkbox("Show trend projection", value=False, key="prediction_duration")
                 
                 fig_duration = px.line(
-                    df_year[df_year['year'] >= 1960],
-                    x='year',
-                    y='duration_min',
-                    title='Song Duration: The Attention Span Crisis',
-                    labels={'duration_min': 'Duration (minutes)', 'year': 'Year'}
+                    df_year_f[df_year_f["year"] >= 1960],
+                    x="year", y="duration_min",
+                    title="Song Duration: The Attention Span Crisis",
+                    labels={"duration_min": "Duration (minutes)", "year": "Year"}
                 )
                 
                 if show_prediction:
                     # Simple linear projection
                     try:
                         from scipy import stats
-                        recent_years = df_year[df_year['year'] >= 2000].copy()
+                        recent_years = df_year_f[df_year_f['year'] >= 2000].copy()
                         
                         # Make sure duration_min is calculated for recent_years
                         if 'duration_min' not in recent_years.columns:
@@ -3065,7 +3513,7 @@ if music_data is not None:
             with col_tempo2:
                             
                 fig_tempo = px.line(
-                    df_year[df_year['year'] >= 1960],
+                    df_year_f[df_year_f['year'] >= 1960],
                     x='year',
                     y='tempo',
                     title='Tempo Evolution: The BPM Arms Race',
@@ -3222,7 +3670,7 @@ if music_data is not None:
             # Filter data
             df_density = df_filtered[(df_filtered['decade'] >= decade_filter_8[0]) & 
                                     (df_filtered['decade'] <= decade_filter_8[1])]
-            df_density_sample = df_density.sample(min(10000, len(df_density)))
+            df_density_sample = df_density.sample(min(10000, len(df_density)), random_state=42)
             
             if viz_style == "Density Heatmap":
                 fig_density = px.density_heatmap(
@@ -3409,7 +3857,11 @@ if music_data is not None:
             
             if genre_view == "Top Genres by Popularity":
                 # Get top 20 genres by popularity
-                top_genres_pop = df_genres.nlargest(20, 'popularity')[['genres', 'popularity']]
+                gframe = align_genre_frame(music_data["with_genres"], filters)
+                df_genres_f = aggregate_by_genre(gframe)
+
+                # Top Genres by Popularity:
+                top_genres_pop = df_genres_f.nlargest(20, "popularity")[["genres","popularity"]]
                 
                 fig_top_genres = px.bar(
                     top_genres_pop,
@@ -3542,9 +3994,11 @@ if music_data is not None:
             
             if explicit_view == "Timeline":
                 # Group by year and explicit
-                explicit_years = df[df['year'] >= 1960].groupby(['year', 'explicit']).size().reset_index(name='count')
-                explicit_years['explicit_label'] = explicit_years['explicit'].map({0: 'Clean', 1: 'Explicit'})
-                
+                explicit_years = (df_filtered[df_filtered["year"] >= 1960]
+                                .groupby(["year","explicit"])
+                                .size().reset_index(name="count"))
+                explicit_years["explicit_label"] = explicit_years["explicit"].map({0:"Clean",1:"Explicit"})
+
                 fig_explicit_years = px.area(
                     explicit_years,
                     x='year',
@@ -3615,7 +4069,8 @@ if music_data is not None:
             )
             
             # Filter for recent years with enough data
-            popularity_trend = df_year[df_year['year'] >= 1920][['year', 'popularity']]
+            df_year_f = aggregate_by_year(df_filtered)
+            popularity_trend = df_year_f[df_year_f["year"] >= 1920][["year","popularity"]]
             
             if popularity_view == "Overall Trend":
                 fig_pop_trend = px.line(
@@ -4542,6 +4997,8 @@ if music_data is not None:
         st.info("**🔍 Strategic Goal:** Compare audio trends against the previous decade and highlight the most successful artists and tracks of the era.")
 
         # 1. Preparação dos Dados (df_year)
+
+        
         if 'decade' not in df_year.columns:
             df_year['decade'] = (df_year['year'] // 10) * 10
             
@@ -4652,20 +5109,17 @@ if music_data is not None:
                     st.write("Please add the `GOOGLE_API_KEY` environment variable.")
                     st.stop()
                 
-                # Create model
-                model = ChatGoogleGenerativeAI(
-                    model="gemini-2.5-flash", 
-                    google_api_key=api_key,
-                    temperature=0
-                )
+                @st.cache_resource
+                def get_ai_agent(api_key: str):
+                    model = ChatGoogleGenerativeAI(
+                        model="gemini-2.5-flash",
+                        google_api_key=api_key,
+                        temperature=0
+                    )
+                    return create_agent(model=model, tools=tools, system_prompt=system_prompt)
                 
-                # Create Agent
-                agent = create_agent(
-                    model=model,
-                    tools=tools,
-                    system_prompt=system_prompt
-                )
-                
+                agent = get_ai_agent(api_key)
+
                 # Initialize chat history
                 if "chat_messages_executor" not in st.session_state:
                     st.session_state.chat_messages_executor = []
