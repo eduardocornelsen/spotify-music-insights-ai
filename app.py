@@ -11,6 +11,8 @@ import time
 import numpy as np
 from dataclasses import dataclass
 import plotly.graph_objects as go
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 from collections import Counter
 
 # --- Importações do LangChain (Tool Calling Agent) ---
@@ -70,6 +72,44 @@ def set_main_tab(tab_name: str):
         unsafe_allow_html=True
     )
 
+
+def render_word_cloud(df_tracks: pd.DataFrame):
+    st.subheader("Word Cloud: Top Keywords in Popular Titles")
+    
+    # 1. Filter for highly popular songs (e.g., top 30%)
+    pop_threshold = df_tracks['popularity'].quantile(0.70)
+    df_popular = df_tracks[df_tracks['popularity'] >= pop_threshold].copy()
+
+    if df_popular.empty or df_popular['name'].empty:
+        st.info("No popular titles found in the filtered dataset to generate a word cloud.")
+        return
+
+    # 2. Extract, clean, and count words
+    all_titles = ' '.join(df_popular['name'].dropna().str.lower())
+    words = re.findall(r'\b\w+\b', all_titles)
+    
+    # Define custom stop words
+    stop_words = set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'is', 'was', 'are', 'i', 'you', 'me', 'it', 'ft', 'feat', 'my', 'all'])
+    filtered_words = [word for word in words if word not in stop_words and len(word) > 2]
+    
+    # 3. Generate Word Cloud object
+    word_string = ' '.join(filtered_words)
+    if not word_string:
+        st.info("No relevant words found after filtering.")
+        return
+        
+    wordcloud = WordCloud(
+        width=800, height=400, background_color='black',
+        colormap='summer', min_font_size=10
+    ).generate(word_string)
+    
+    # 4. Display the image in Streamlit
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    st.pyplot(fig, use_container_width=True)
+
+    
 # --- UTILITY FUNCTIONS FOR ANIMATIONS ---
 
 def show_loading_animation(message="Loading...", duration=0.5):
@@ -1557,7 +1597,7 @@ if music_data is not None:
                 "cols": "danceability, energy, valence, acousticness, instrumentalness, loudness, speechiness, popularity",
                 "gb": "df_success.groupby('success_level')"
             },
-            "🔗 Temporal Trends": {
+            "🕓 Temporal Trends": {
                 "problem": "How have song duration and tempo (BPM) changed over the decades? Can we project future trends?",
                 "cols": "year, duration_ms, tempo",
                 "gb": "df_filtered.groupby('year') (via aggregate_by_year)"
@@ -3523,74 +3563,75 @@ if music_data is not None:
                     )
 
     # --------------------------------------------------------
-    # VIZ 16: TITLE ANALYTICS (Corrected: No arguments, safe checks)
+    # VIZ 16: TITLE ANALYTICS (FINAL CORRECTED VERSION)
     # --------------------------------------------------------
     def render_titles(df_filtered: pd.DataFrame):
         st.subheader("16. The Power of Words: Song Title Analysis")
         st.info("**🔍 Strategic Questions:** Do shorter titles perform better? What words appear most in hit songs? Can title sentiment predict success?")
 
-        # --- FIX: Check for empty data first ---
         if df_filtered.empty:
             st.warning("No data available for the selected filters.")
             return
 
-        title_analysis_type = st.radio(
-            "Analysis Type:",
-            ["Title Length vs Popularity", "Most Common Words", "Title Patterns"],
-            horizontal=True,
-            key="title_analysis"
-        )
-
-        # --- This .copy() is perfect! ---
         df_titles = df_filtered.copy()
-        
-        # Check for NaNs in 'name' column, which can break string ops
         if df_titles['name'].isna().any():
             df_titles = df_titles.dropna(subset=['name'])
 
+        # Prepare data (word count, length, uniqueness)
+        def calculate_uniqueness_score(name):
+            if not name or pd.isna(name): return 0.0
+            words = str(name).lower().split()
+            if not words: return 0.0
+            return len(set(words)) / len(words)
+            
         df_titles['title_length'] = df_titles['name'].str.len()
         df_titles['title_word_count'] = df_titles['name'].str.split().str.len()
+        df_titles['uniqueness_score'] = df_titles['name'].apply(calculate_uniqueness_score)
 
+        title_analysis_type = st.radio(
+            "Analysis Type:",
+            ["Title Length vs Popularity", "Most Common Words", "Title Patterns", "Word Cloud"], 
+        horizontal=True,
+        key="title_analysis"
+    )
+
+        # --- Initialize a single variable for the final chart output ---
+        final_chart = None 
+        
         if title_analysis_type == "Title Length vs Popularity":
+            st.markdown("### Title Length vs Word Count")
+            
             col_title1, col_title2 = st.columns(2)
             
             with col_title1:
+                # 1. Character Length Analysis
                 fig_title_len = px.scatter(
                     df_titles.sample(min(5000, len(df_titles))),
-                    x='title_length',
-                    y='popularity',
-                    trendline='lowess',
+                    x='title_length', y='popularity', trendline='lowess',
                     title='Title Length (Characters) vs Popularity',
-                    labels={'title_length': 'Title Length (chars)', 'popularity': 'Popularity'},
-                    opacity=0.6,
                     template='plotly_dark'
                 )
-                fig_title_len.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
-                st.plotly_chart(fig_title_len, use_container_width=True)
-            
-            with col_title2:
-                # --- FIX: Use np.inf for the last bin ---
-                word_bins = pd.cut(df_titles['title_word_count'], 
-                                bins=[0, 1, 2, 3, 4, np.inf], 
-                                labels=['1 word', '2 words', '3 words', '4 words', '5+ words'])
+                st.plotly_chart(fig_title_len, use_container_width=True, key="plot_title_len")
                 
-                # --- FIX: Add observed=True ---
+            with col_title2:
+                # 2. Word Count Analysis
+                word_bins = pd.cut(df_titles['title_word_count'], bins=[0, 1, 2, 3, 4, np.inf], 
+                                labels=['1 word', '2 words', '3 words', '4 words', '5+ words'])
                 word_popularity = df_titles.groupby(word_bins, observed=True)['popularity'].mean().reset_index()
                 
                 fig_word_count = px.bar(
-                    word_popularity,
-                    x='title_word_count',
-                    y='popularity',
+                    word_popularity, x='title_word_count', y='popularity',
                     title='Average Popularity by Title Word Count',
-                    labels={'title_word_count': 'Word Count', 'popularity': 'Average Popularity'},
-                    color='popularity',
-                    color_continuous_scale='Viridis',
                     template='plotly_dark'
                 )
-                fig_word_count.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
-                st.plotly_chart(fig_word_count, use_container_width=True)
+                st.plotly_chart(fig_word_count, use_container_width=True, key="plot_word_count")
+                
+            # The chart rendering is done inside the columns, so we set final_chart to None
+            final_chart = None 
 
         elif title_analysis_type == "Most Common Words":
+            # 3. Most Common Words
+            st.markdown("### Top Words in Popular Titles")
             df_popular_titles = df_titles[df_titles['popularity'] > 50]
             
             if df_popular_titles.empty:
@@ -3608,66 +3649,138 @@ if music_data is not None:
                 st.info("No common words found.")
                 return
 
-            fig_words = px.bar(
-                top_words,
-                x='count',
-                y='word',
-                orientation='h',
+            final_chart = px.bar( 
+                top_words, x='count', y='word', orientation='h',
                 title='Most Common Words in Popular Songs (>50 popularity)',
-                labels={'count': 'Frequency', 'word': 'Word'},
-                color='count',
-                color_continuous_scale='Viridis',
                 template='plotly_dark'
             )
-            fig_words.update_layout(
-                plot_bgcolor='#181818', paper_bgcolor='#181818',
-                font_color='#B3B3B3', height=600,
-                yaxis={'categoryorder':'total ascending'}
-            )
-            st.plotly_chart(fig_words, use_container_width=True)
+            final_chart.update_layout(height=600, yaxis={'categoryorder':'total ascending'})
 
-        else:  # Title Patterns
+        elif title_analysis_type == "Title Patterns":
+            st.markdown("### Title Patterns: Impact vs Adoption")
+            
+            # Chart 4: Title Patterns Impact
             df_titles['has_feat'] = df_titles['name'].str.contains('feat\.|ft\.|featuring', case=False, na=False)
             df_titles['has_parentheses'] = df_titles['name'].str.contains('\(|\)', na=False)
             df_titles['has_numbers'] = df_titles['name'].str.contains('\d', na=False)
             df_titles['is_uppercase'] = df_titles['name'].str.isupper()
             
-            patterns = {
-                'Features': df_titles.groupby('has_feat')['popularity'].mean(),
-                'Parentheses': df_titles.groupby('has_parentheses')['popularity'].mean(),
-                'Numbers': df_titles.groupby('has_numbers')['popularity'].mean(),
-                'All Caps': df_titles.groupby('is_uppercase')['popularity'].mean()
+            features_to_group = {
+                'Features (ft.)': df_titles['has_feat'],
+                'Parentheses ( )': df_titles['has_parentheses'],
+                'Numbers (e.g., 2020)': df_titles['has_numbers'],
+                'ALL CAPS': df_titles['is_uppercase']
             }
             
             pattern_results = []
-            for pattern, data in patterns.items():
-                # This 'if len(data) == 2' check is perfect!
-                if len(data) == 2 and True in data.index and False in data.index:
+            for pattern_name, series in features_to_group.items():
+                pop_by_pattern = df_titles.groupby(series)['popularity'].agg(['mean', 'count'])
+                
+                if True in pop_by_pattern.index and False in pop_by_pattern.index:
+                    pop_with = pop_by_pattern.loc[True, 'mean']
+                    pop_without = pop_by_pattern.loc[False, 'mean']
+                    count_with = pop_by_pattern.loc[True, 'count']
+                    
                     pattern_results.append({
-                        'Pattern': pattern,
-                        'Without': data[False],
-                        'With': data[True],
-                        'Impact': data[True] - data[False]
+                        'Pattern': pattern_name,
+                        'Impact': (pop_with - pop_without),
+                        'Without': pop_without,
+                        'With': pop_with,
+                        'Adoption': (count_with / len(df_titles)) * 100
                     })
-            
+
             if not pattern_results:
                 st.info("Not enough data to compare title patterns.")
                 return
-
+            
             pattern_df = pd.DataFrame(pattern_results)
             
-            fig_patterns = px.bar(
-                pattern_df,
-                x=['Without', 'With'],
+            # --- FIX 2: Assign the figure to final_chart here ---
+            final_chart = px.bar(
+                pattern_df.sort_values('Impact', ascending=False),
+                x='Impact',
                 y='Pattern',
-                title='Impact of Title Patterns on Popularity',
-                labels={'value': 'Average Popularity', 'variable': 'Pattern Type'},
-                barmode='group',
-                template='plotly_dark',
-                color_discrete_sequence=['#B3B3B3', '#1DB954']
+                orientation='h',
+                title='Impact of Title Patterns on Popularity (Difference)',
+                template='plotly_dark'
             )
-            fig_patterns.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
-            st.plotly_chart(fig_patterns, use_container_width=True)
+            final_chart.update_layout(height=400, yaxis={'categoryorder':'total ascending'})        
+        
+        else:
+            st.markdown("### 🏆 Uniqueness Score: How Original is Your Title?")
+        
+            # 1. Calculate overall correlation
+            correlation = df_titles['uniqueness_score'].corr(df_titles['popularity'])
+
+            col_uni1, col_uni2 = st.columns(2)
+            
+            with col_uni1:
+                st.metric(
+                    "Overall Uniqueness-Pop Correlation", 
+                    f"{correlation:.3f}", 
+                    delta=f"{'Positive' if correlation > 0 else 'Negative'}",
+                    help="Measures if songs with more unique words in their title are more popular."
+                )
+            
+            with col_uni2:
+                st.metric(
+                    "Average Uniqueness Score",
+                    f"{df_titles['uniqueness_score'].mean():.3f}",
+                    help="The ratio of unique words to total words across all titles (1.0 = highly unique)."
+                )
+
+            # 2. Plot Uniqueness vs. Popularity across Decades
+            decadal_uniqueness = df_titles.groupby('decade')['uniqueness_score'].mean().reset_index()
+        
+            final_chart = px.line( # Assign to final_chart
+                decadal_uniqueness,
+                x='decade', y='uniqueness_score',
+                title='Title Uniqueness Evolution by Decade',
+                template='plotly_dark'
+            )
+            final_chart.update_layout(yaxis_range=[0.5, 1.0])
+
+
+        # -----------------------------------------------------------
+        # --- FINAL PLOTTING CALL (Runs only once at the end) ---
+        # -----------------------------------------------------------
+        if final_chart:
+            st.plotly_chart(final_chart, use_container_width=True, key="plot_final_title_chart")
+
+
+    
+        # -------------------------------------------------------------------------------------
+        # --- GLOBAL PLOTTING CALLS (Replace this entire conditional block) ---
+        # -------------------------------------------------------------------------------------
+        
+        # The chart rendering MUST be in the same block as the figure creation to work correctly.
+        # Since your logic currently places the chart calls *outside* their creation block, 
+        # the entire conditional structure must be simplified.
+        
+        # Here is the robust pattern to follow (assuming the main logic above is complete):
+        
+        if title_analysis_type == "Title Length vs Popularity":
+            # The two figures (fig_title_len, fig_word_count) are rendered inside their columns.
+            st.markdown("---")
+            st.info("The Title Length analysis uses two columns and figures that are rendered above.")
+            
+        elif title_analysis_type == "Most Common Words":
+            # We assume fig_words was created in the elif block above and rendered there.
+            st.markdown("---")
+            st.info("The Most Common Words chart is rendered above.")
+            
+        elif title_analysis_type == "Title Patterns":
+            # We assume fig_patterns was created in the else block of VIZ Patterns.
+            st.markdown("---")
+            st.info("The Title Patterns chart is rendered above.")
+            
+        elif title_analysis_type == "Title Uniqueness Score": # The block you just fixed
+            # The fig_final was rendered in the block above
+            pass # Do nothing, the chart is already on the page.
+
+        else:
+            st.markdown("---")
+            st.info("Select a visualization type above.")
 
     # --------------------------------------------------------
     # VIZ 17: COLLABORATION PATTERNS (Corrected: No arguments)
@@ -3825,7 +3938,21 @@ if music_data is not None:
         # --- 1. VIZ MAP (Only includes analytical charts) ---
         viz_map = {
             "📈 Evolution of Features": lambda: render_evolution(df_filtered),
-            # ... (all your 16 visualization map items go here) ...
+            "📊 Popularity vs Features": lambda: render_correlation(df_filtered),
+            "🎸 Genre DNA": lambda: render_genre_dna(df_filtered),
+            "🔞 Explicit Strategy": lambda: render_explicit(df_filtered),
+            "📈 Explicit Over Time": lambda: render_explicit_time(df_filtered),
+            "🔗 Feature Relationships": lambda: render_feature_relationships(df_filtered),
+            "🕓 Temporal Trends": lambda: render_temporal(df_filtered),
+            "👤 Artist Success Patterns": lambda: render_artists(df_filtered),
+            "🔍 Feature Explorer": lambda: render_explorer(df_filtered),
+            "🎵 Key & Mode": lambda: render_keys(df_filtered),
+            "📅 Decade Evolution": lambda: render_decades(df_filtered),
+            "💰 Genre Economics": lambda: render_genre_econ(df_filtered),
+            "⏱️ Tempo Zones": lambda: render_tempo(df_filtered),
+            "🌟 Popularity Lifecycle": lambda: render_pop_lifecycle(df_filtered),
+            "🚀 Artist Evolution": lambda: render_artist_evo(df_filtered),
+            "💬 Title Analytics": lambda: render_titles(df_filtered),
             "🤝 Collaboration Patterns": lambda: render_collab(df_filtered),
         }
 
@@ -4213,6 +4340,32 @@ if music_data is not None:
                     if st.button("📊 Outlier Songs", key='btn_4e', use_container_width=True):
                         set_button_prompt("Find songs with unusual combinations: high energy but low danceability (energy>0.8, danceability<0.3).")
 
+                # ---------------------------------------------------
+                # ROW 5: TITLE ANALYTICS
+                # ---------------------------------------------------
+                st.markdown("**5. SONG TITLE ANALYSIS**")
+                col21, col22, col23, col24, col25 = st.columns(5)
+
+                with col21:
+                    if st.button("🔠 Most Common Words", key='btn_5a', use_container_width=True):
+                        set_button_prompt("What are the top 15 most common words in song names where popularity is above 70? (Exclude common stop words).")
+
+                with col22:
+                    if st.button("📏 Title Length vs Pop", key='btn_5b', use_container_width=True):
+                        set_button_prompt("Calculate the correlation between song title length (characters) and popularity.")
+
+                with col23:
+                    if st.button("🧠 Acronym Success", key='btn_5c', use_container_width=True):
+                        set_button_prompt("Compare the average popularity of tracks with ALL CAPS titles versus standard titles.")
+
+                with col24:
+                    if st.button("🤝 Collab Title Impact", key='btn_5d', use_container_width=True):
+                        set_button_prompt("What is the average track count for songs with the word 'feat' in the title versus those without?")
+
+                with col25:
+                    if st.button("🗓️ Trend in Word Count", key='btn_5e', use_container_width=True):
+                        set_button_prompt("How has the average number of words in song titles changed over the decades since 1980?")
+
                 st.divider()
 
                 # Process input
@@ -4249,12 +4402,36 @@ if music_data is not None:
                             with st.expander("🔍 Debug: View executed code"):
                                 st.code(str(response), language="python")
 
-                            # Display text only
-                            message_placeholder.markdown(text_content)
+                            # --- FIX: Parse using the new markers ---
+                            
+                            # 1. Find the code block
+                            code_match = text_content.split("[CODE_OUTPUT]:")
+                            code_executed = code_match[1].split("[FINAL_ANSWER]:")[0].strip() if len(code_match) > 1 else "N/A"
+                            
+                            # 2. Find the final response text
+                            answer_match = text_content.split("[FINAL_ANSWER]:")
+                            final_answer = answer_match[-1].strip() if len(answer_match) > 1 else text_content
+                            
+                            # 3. Display the Final Answer
+                            message_placeholder.markdown(final_answer)
+
+                            # 4. Display the code/thoughts in the expander
+                            with st.expander("🔬 Agent's Analysis & Code"):
+                                st.markdown("### Reasoning and Code Executed")
+                                
+                                # Display the code block itself
+                                st.code(code_executed, language="python")
+                                
+                                # Display the full raw output (for debugging visibility)
+                                if code_executed == "N/A":
+                                     st.warning("Tool call did not execute successfully or output was missing markers.")
+                                     st.code(text_content, language="text")
+
+                            # 5. Store history
                             st.session_state.chat_messages_executor.append({
                                 "role": "assistant",
-                                "content": text_content
-                            })                            
+                                "content": final_answer 
+                            })
 
                         except Exception as e:
                             message_placeholder.empty()
