@@ -49,14 +49,26 @@ def set_viz(viz_name: str):
 
 def set_main_tab(tab_name: str):
     """
-    Callback function to update the main page tab and reset the viz_picker.
-    (Used by sidebar navigation and the floating AI button)
+    Callback function to update the main page tab, reset the viz_picker,
+    and force the page to scroll to the top for a clean transition.
     """
     st.session_state.current_tab = tab_name
     
-    # FIX: If the user navigates TO the Home tab, reset the viz picker to the Welcome Page.
+    # If the user navigates TO the Home tab, reset the viz picker to the Welcome Page.
     if tab_name == "Home":
-        st.session_state.viz_picker = "🏠 Home"
+        st.session_state.viz_picker = "🏠 Welcome & Table of Contents"
+
+    # --- CRITICAL FIX: Inject JavaScript to scroll to the top ---
+    # This must be outside the st.sidebar scope, so we use st.markdown.
+    # We use a simple script that scrolls the main window to the top.
+    st.markdown(
+        """
+        <script>
+            window.parent.document.querySelector('body').scrollTo(0, 0);
+        </script>
+        """, 
+        unsafe_allow_html=True
+    )
 
 # --- UTILITY FUNCTIONS FOR ANIMATIONS ---
 
@@ -107,6 +119,7 @@ def apply_all_effects():
     """Apply all visual effects to the dashboard"""
     st.markdown("""
     <style>
+                
         /* ============ SMOOTH SCROLLING ============ */
     
         /* Enable smooth scrolling globally */
@@ -621,6 +634,7 @@ def apply_all_effects():
             from { opacity: 0; }
             to { opacity: 1; }
         }
+                
     </style>
                 
     <!-- Add Scroll Progress Bar -->
@@ -4050,7 +4064,7 @@ if music_data is not None:
     # --------------------------------------------------------
     elif st.session_state.current_tab == "AI Consultant":
         st.header("🧠 Music Data Consultant 💬")
-        st.markdown("Ask complex questions about music trends, correlations, and patterns. The AI executes Python code to analyze the data.")
+        st.info("Ask complex questions about music trends, correlations, and patterns. The AI executes Python code to analyze the data.")
 
         if not IA_DISPONIVEL:
             st.warning("LangChain libraries are not properly installed. The AI tab is disabled.")

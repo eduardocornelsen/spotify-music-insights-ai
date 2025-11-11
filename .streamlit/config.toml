@@ -21,3 +21,6 @@ headless = true
 [browser]
 # Custom tab title
 gatherUsageStats = false
+
+[ui]
+sidebarWidth = 400
