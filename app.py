@@ -10,6 +10,8 @@ from langchain.tools import tool
 import time
 import numpy as np
 from dataclasses import dataclass
+import plotly.graph_objects as go
+from collections import Counter
 
 # --- Importações do LangChain (Tool Calling Agent) ---
 try:
@@ -37,6 +39,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+#--- FUNCTION FOR TOC ---
+def set_viz(viz_name: str):
+    """
+    Callback function to update the visualization picker.
+    """
+    st.session_state.viz_picker = viz_name
 
 # --- UTILITY FUNCTIONS FOR ANIMATIONS ---
 
@@ -790,11 +798,6 @@ if music_data and 'stats_shown' not in st.session_state:
     # Set the flag so it only runs once
     st.session_state.stats_shown = True
 
-
-# --- LOGO E DADOS DO DATASET ---
-spotify_logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/1024px-Spotify_logo_without_text.svg.png"
-dataset_url = "https://www.kaggle.com/datasets/yamaerenay/spotify-dataset-19212020-160k-tracks"
-
 # --- Initialize Session State for Navigation ---
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = "Dashboard"
@@ -802,11 +805,14 @@ if 'current_tab' not in st.session_state:
 
 # --- Sidebar Navigation ---
 
+spotify_logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/1024px-Spotify_logo_without_text.svg.png"
+dataset_url = "https://www.kaggle.com/datasets/yamaerenay/spotify-dataset-19212020-160k-tracks"
+
 header_html = f"""
 <div style="
-    display: flex;           /* Creates the side-by-side layout */
-    align-items: center;     /* This is the correct vertical alignment! */
-    margin-bottom: 20px;     /* Matches your original margin-bottom */
+    display: flex;        
+    align-items: center;     
+    margin-bottom: 20px;     
 ">
     <img src="{spotify_logo_url}" width="80" style="margin-right: 15px;">
     
@@ -821,7 +827,6 @@ st.sidebar.html(header_html)
 # Navigation Section
 st.sidebar.markdown("### 🎵 Navigation")
 
-# All navigation tabs treated equally
 tabs = ["AI Consultant", "Dashboard", "Insights", "Data Explorer"]
 
 for tab in tabs:
@@ -901,19 +906,19 @@ def display_sidebar_stats(music_data, df_filtered=None):
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
         <div style="background:#0a0a0a; padding:8px; border-radius:6px; text-align:center;">
           <div style="color:#1DB954; font-weight:bold;">{years}</div>
-          <div style="color:#666; font-size:10px;">Years</div>
+          <div style="color:#666; font-size:12px;">Years</div>
         </div>
         <div style="background:#0a0a0a; padding:8px; border-radius:6px; text-align:center;">
           <div style="color:#1DB954; font-weight:bold;">{artists:,}</div>
-          <div style="color:#666; font-size:10px;">Artists</div>
+          <div style="color:#666; font-size:12px;">Artists</div>
         </div>
         <div style="background:#0a0a0a; padding:8px; border-radius:6px; text-align:center;">
           <div style="color:#1DB954; font-weight:bold;">{avg_pop:.0f}</div>
-          <div style="color:#666; font-size:10px;">Avg Pop</div>
+          <div style="color:#666; font-size:12px;">Avg Pop</div>
         </div>
         <div style="background:#0a0a0a; padding:8px; border-radius:6px; text-align:center;">
           <div style="color:#1DB954; font-weight:bold;">{explicit_count:,}</div>
-          <div style="color:#666; font-size:10px;">Explicit</div>
+          <div style="color:#666; font-size:12px;">Explicit</div>
         </div>
       </div>
     </div>
@@ -1018,7 +1023,8 @@ if music_data is not None:
     with st.sidebar.expander("Filter Options", expanded=True):
         
         # Get the list of decades
-        decade_options = sorted(df[df['decade'] >= 1950]['decade'].unique())
+        # --- FIX: Removed the '>= 1950' filter ---
+        decade_options = sorted(df['decade'].unique())
         
         # Decade Range Filter
         decade_range = st.select_slider(
@@ -1073,6 +1079,43 @@ if music_data is not None:
                 artist1 = st.selectbox("First Artist", artist_list, key="artist1")
                 artist2 = st.selectbox("Second Artist", artist_list, key="artist2")
                 st.session_state.compare_items = (artist1, artist2)
+
+        # ---------------------------------------------------
+        # NEW: AUDIO FEATURE FILTERS (in 2 columns)
+        # ---------------------------------------------------
+        st.sidebar.markdown("### 🔬 Audio Feature Filters")
+        with st.sidebar.expander("Filter by Audio Features", expanded=False):
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                dance_range = st.slider(
+                    "Danceability:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_dance"
+                )
+                energy_range = st.slider(
+                    "Energy:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_energy"
+                )
+                valence_range = st.slider(
+                    "Valence:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_valence"
+                )
+                # Loudness has a different range (dB)
+                loudness_range = st.slider(
+                    "Loudness (dB):", -60.0, 0.0, (-60.0, 0.0), 0.1, key="f_loud"
+                )
+                
+            with col2:
+                acoustic_range = st.slider(
+                    "Acousticness:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_acoustic"
+                )
+                instr_range = st.slider(
+                    "Instrumentalness:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_instr"
+                )
+                live_range = st.slider(
+                    "Liveness:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_live"
+                )
+                speech_range = st.slider(
+                    "Speechiness:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_speech"
+                )
     
     selected_key_numbers = [k for k, v in KEY_MAP.items() if v in key_filter_names]
 
@@ -1083,29 +1126,64 @@ if music_data is not None:
         decade_end: int
         pop_min: int
         pop_max: int
-        explicit: str        # "All", "Clean Only", "Explicit Only"
-        keys: tuple[int, ...]  # musical keys as ints
+        explicit: str
+        keys: tuple[int, ...]
+        
+        # --- ADD THESE 8 NEW LINES ---
+        dance_range: tuple[float, float]
+        energy_range: tuple[float, float]
+        valence_range: tuple[float, float]
+        loudness_range: tuple[float, float]
+        acoustic_range: tuple[float, float]
+        instr_range: tuple[float, float]
+        live_range: tuple[float, float]
+        speech_range: tuple[float, float]
 
     @st.cache_data(show_spinner=False)
     def filter_tracks(df: pd.DataFrame, f: FilterState) -> pd.DataFrame:
+        # These first two lines are from your existing code
         q = df[(df["decade"] >= f.decade_start) & (df["decade"] <= f.decade_end)]
         q = q[(q["popularity"] >= f.pop_min) & (q["popularity"] <= f.pop_max)]
+        
+        # --- ADD THESE 8 NEW LINES ---
+        q = q[(q["danceability"] >= f.dance_range[0]) & (q["danceability"] <= f.dance_range[1])]
+        q = q[(q["energy"] >= f.energy_range[0]) & (q["energy"] <= f.energy_range[1])]
+        q = q[(q["valence"] >= f.valence_range[0]) & (q["valence"] <= f.valence_range[1])]
+        q = q[(q["loudness"] >= f.loudness_range[0]) & (q["loudness"] <= f.loudness_range[1])]
+        q = q[(q["acousticness"] >= f.acoustic_range[0]) & (q["acousticness"] <= f.acoustic_range[1])]
+        q = q[(q["instrumentalness"] >= f.instr_range[0]) & (q["instrumentalness"] <= f.instr_range[1])]
+        q = q[(q["liveness"] >= f.live_range[0]) & (q["liveness"] <= f.live_range[1])]
+        q = q[(q["speechiness"] >= f.speech_range[0]) & (q["speechiness"] <= f.speech_range[1])]
+
+        # These are from your existing code
         if f.explicit == "Clean Only":
             q = q[q["explicit"] == 0]
         elif f.explicit == "Explicit Only":
             q = q[q["explicit"] == 1]
         if f.keys:
             q = q[q["key"].isin(f.keys)]
+            
         return q
 
     # Build FilterState from sidebar widgets
     filters = FilterState(
+        # Your existing 6 fields
         decade_start=decade_range[0],
         decade_end=decade_range[1],
         pop_min=popularity_range[0],
         pop_max=popularity_range[1],
         explicit=explicit_filter,
-        keys=tuple(sorted(selected_key_numbers))
+        keys=tuple(sorted(selected_key_numbers)),
+        
+        # --- ADD THESE 8 NEW LINES ---
+        dance_range=dance_range,
+        energy_range=energy_range,
+        valence_range=valence_range,
+        loudness_range=loudness_range,
+        acoustic_range=acoustic_range,
+        instr_range=instr_range,
+        live_range=live_range,
+        speech_range=speech_range
     )
 
     df_filtered = filter_tracks(df, filters)
@@ -1120,7 +1198,7 @@ if music_data is not None:
                 energy=("energy","mean"),
                 danceability=("danceability","mean"),
                 valence=("valence","mean"),
-                acousticness=("acousticness","mean"),
+                acousticness=("acousticness","mean"),S
                 instrumentalness=("instrumentalness","mean"),
                 speechiness=("speechiness","mean"),
                 liveness=("liveness","mean"),
@@ -1171,15 +1249,424 @@ if music_data is not None:
                 tempo=("tempo","mean")))
         return agg
     
-    def render_evolution(df_filtered: pd.DataFrame):
+    # --------------------------------------------------------
+    # NEW WELCOME PAGE FUNCTION (with consistent font sizes)
+    # --------------------------------------------------------
+    def render_welcome_page():
+        st.header("🏠 Welcome to MusicInsights AI")
+        st.markdown("This dashboard provides a deep dive into over 100 years of music data from Spotify. Use the filters in the sidebar to narrow your analysis and select a visualization from the dropdown below, or click a 'Go to' button in the Table of Contents.")
+        
+        st.subheader("About the Author & Data")
+        st.markdown(f"""
+        This dashboard was created by **Eduardo Cornelsen**.
+        - **GitHub Repository:** [github.com/duducornelsen](https://github.com/duducornelsen)
+        - **LinkedIn Profile:** [linkedin.com/in/eduardo-cornelsen](https://www.linkedin.com/in/eduardo-cornelsen-389b1b1a4/)
+        
+        The data for this project is sourced from the [Spotify Dataset 1921-2020](https://www.kaggle.com/datasets/yamaerenay/spotify-dataset-19212020-160k-tracks) on Kaggle.
+        """)
+        
+        st.divider()
+        
+        st.subheader("📊 Table of Contents (Visualizations)")
+        st.info("Click on any title to see its details, then click the 'Go to...' button to load the chart.")
+
+        # --- DEFINE OUR NEW STYLES ---
+        TOC_INFO_BOX = """
+        <div style="
+            background-color: rgba(0, 104, 225, 0.1); 
+            border: 1px solid rgba(0, 104, 225, 0.5);
+            border-radius: 6px; 
+            padding: 10px 12px; 
+            margin-bottom: 10px;
+        ">
+            <strong style="
+                color: #FFFFFF; 
+                text-align: center; 
+                display: block; 
+                /* FIX: font-size: 1.1em; REMOVED to match expander title */
+            ">
+                Key Problem
+            </strong>
+            
+            <hr style="
+                border: none; 
+                border-top: 1px solid rgba(0, 104, 225, 0.5); 
+                margin: 8px 0;
+            ">
+            
+            <span style="
+                color: #E0E0E0; 
+                text-align: center; 
+                display: block;
+            ">
+                {problem_text}
+            </span>
+        </div>
+        """
+        
+        TOC_DETAILS_MD = """
+        - **Columns Used:** `{columns}`
+        - **Main `.groupby()`:** `{groupby}`
+        """
+
+        # --- LIST OF ALL VISUALIZATIONS ---
+        # (This data is all the same)
+        viz_toc = {
+            "📈 Evolution of Features": {
+                "problem": "How have the sonic qualities of music (like energy and acousticness) changed over the last 100 years?",
+                "cols": "year, danceability, energy, valence, acousticness, instrumentalness, speechiness, liveness, loudness",
+                "gb": "df_filtered.groupby('year', ...)"
+            },
+            "📊 Popularity vs Features": {
+                "problem": "Is there a correlation between a song's audio features (like high energy) and its popularity? Which feature is the best predictor of a hit?",
+                "cols": "popularity, energy, danceability, valence, acousticness, instrumentalness, speechiness",
+                "gb": "No groupby; plots sampled raw data."
+            },
+            "🎸 Genre DNA": {
+                "problem": "What is the unique audio 'signature' of different genres? How do genres compare in terms of energy, valence, etc.?",
+                "cols": "genres, popularity, energy, danceability, valence, acousticness, speechiness",
+                "gb": "gframe_filtered.groupby('genres', ...)"
+            },
+            "🔞 Explicit Strategy": {
+                "problem": "Is explicit content a successful commercial strategy? How does it impact popularity and other audio features?",
+                "cols": "explicit, popularity, energy, danceability, valence, speechiness",
+                "gb": "No groupby; maps and plots data directly."
+            },
+            "📈 Explicit Over Time": {
+                "problem": "When did explicit content become mainstream? Which genres pioneered it, and how has its popularity trended over time?",
+                "cols": "year, explicit, genres, popularity",
+                "gb": "df_filtered.groupby(['year','explicit']), gframe_filtered.groupby('genres')"
+            },
+            "🔗 Feature Relationships": {
+                "problem": "Which audio features are most strongly correlated? Can we identify a 'formula' for success by analyzing feature averages for high-popularity songs?",
+                "cols": "danceability, energy, valence, acousticness, instrumentalness, loudness, speechiness, popularity",
+                "gb": "df_success.groupby('success_level')"
+            },
+            "🔗 Temporal Trends": {
+                "problem": "How have song duration and tempo (BPM) changed over the decades? Can we project future trends?",
+                "cols": "year, duration_ms, tempo",
+                "gb": "df_filtered.groupby('year') (via aggregate_by_year)"
+            },
+            "👤 Artist Success Patterns": {
+                "problem": "What separates consistent hitmakers from 'one-hit wonders'? This analyzes volume vs. quality, consistency, and the audio signature of top artists.",
+                "cols": "artists, popularity, energy, valence, count",
+                "gb": "df_filtered.groupby('artist_clean') (via aggregate_by_artist)"
+            },
+            "🔍 Feature Explorer": {
+                "problem": "What interactive combinations of features (e.g., Energy vs. Danceability) lead to the most popular songs? Where are the 'sweet spots'?",
+                "cols": "User-selected X/Y features (e.g., danceability, energy, popularity), decade",
+                "gb": "No groupby; plots sampled raw data."
+            },
+            "🎵 Key & Mode": {
+                "problem": "Do certain musical keys (C, G, A#) or modes (Major vs. Minor) correlate with higher popularity or specific emotions (valence)?",
+                "cols": "key, mode, popularity, valence",
+                "gb": "df_keys.groupby(['key_name', 'mode_name'])"
+            },
+            "📅 Decade Evolution": {
+                "problem": "How does the distribution of a single feature change across decades? Are modern songs more or less diverse in their sound?",
+                "cols": "decade, User-selected feature (e.g., valence)",
+                "gb": "df_decades.groupby('decade')"
+            },
+            "💰 Genre Economics": {
+                "problem": "Which genres have the highest popularity ('Power Rankings')? What is their 'Market Share' (volume of tracks)?",
+                "cols": "genres, popularity",
+                "gb": "gframe_filtered.groupby('genres')"
+            },
+            "⏱️ Tempo Zones": {
+                "problem": "Is there an optimal BPM for hit songs? This analyzes popularity by 'BPM Zones' (Slow, Dance, Fast) and how those preferences have evolved.",
+                "cols": "tempo, popularity, decade",
+                "gb": "df_tempo.groupby('bpm_zone'), df_tempo.groupby(['decade', 'bpm_zone'])"
+            },
+            "🌟 Popularity Lifecycle": {
+                "problem": "How has average popularity changed over 100 years (the 'Streaming Effect')? What audio features do 'timeless' songs have in common?",
+                "cols": "year, popularity, era, energy, danceability, valence, acousticness",
+                "gb": "df_filtered.groupby('year'), df_eras.groupby('era'), df_timeless.groupby('is_timeless')"
+            },
+            "🚀 Artist Evolution": {
+                "problem": "Which artists dominated each era? This analyzes artist performance over time, career longevity, and 'Rising Stars' with high momentum.",
+                "cols": "artists, year, decade, popularity, name",
+                "gb": "df_artist_time.groupby(['time_period', 'artist_clean']), df_dominance.groupby('artist_clean'), df_longevity.groupby('artist_clean')"
+            },
+            "💬 Title Analytics": {
+                "problem": "Do song titles affect popularity? This analyzes title length, most common words in hits, and the impact of patterns (like 'feat.', '()', or 'ALL CAPS').",
+                "cols": "name, popularity",
+                "gb": "df_titles.groupby(word_bins), df_titles.groupby('has_feat')"
+            },
+            "🤝 Collaboration Patterns": {
+                "problem": "Do collaborations (songs with >1 artist) actually perform better? What is the optimal 'team size' for a hit song?",
+                "cols": "artists, artist_count, popularity, year",
+                "gb": "df_collab.groupby('is_collab'), df_collab.groupby('year'), df_collab.groupby('artist_count')"
+            }
+        }
+        
+        # --- CREATE 3-COLUMN LAYOUT ---
+        cols = st.columns(3)
+        
+        for i, (viz_name, details) in enumerate(viz_toc.items()):
+            with cols[i % 3]:
+                with st.expander(f"**{i+1}. {viz_name}**", expanded=True):
+                    
+                    # Use st.html for the new info box
+                    st.html(TOC_INFO_BOX.format(problem_text=details["problem"]))
+                    
+                    # This markdown remains left-aligned by default
+                    st.markdown(TOC_DETAILS_MD.format(
+                        columns=details["cols"],
+                        groupby=details["gb"]
+                    ))
+                    
+                    # Center the button
+                    st.markdown("<br>", unsafe_allow_html=True) 
+                    _, col_btn_mid, _ = st.columns([1, 2, 1])
+                    with col_btn_mid:
+                        st.button(
+                            "Go to ➔", 
+                            key=f"toc_{i+1}", 
+                            on_click=set_viz, 
+                            args=(viz_name,),
+                            use_container_width=True
+                        )
+
+
+
+    # --------------------------------------------------------
+    # NEW: ACTIVE DATASET HEADER (with corrected font sizes)
+    # --------------------------------------------------------
+    def render_active_dataset_header():
+        """
+        Displays a dynamic, horizontal header with custom HTML/CSS
+        to match the sidebar style.
+        """
+        
+        # --- Get the filtered data ---
+        # (Assumes df_filtered and music_data are in the global scope)
+        try:
+            if df_filtered is None or len(df_filtered) == 0 or len(df_filtered) == len(music_data['main']):
+                df_active = music_data['main']
+                percentage = 100.0
+            else:
+                df_active = df_filtered
+                total_tracks = len(music_data['main'])
+                percentage = (len(df_active) / total_tracks) * 100 if total_tracks > 0 else 0
+            
+            active_tracks = len(df_active)
+            year_range = f"{df_active['year'].min()} - {df_active['year'].max()}"
+            artist_count = df_active['artists'].nunique()
+            avg_pop = df_active['popularity'].mean()
+            explicit_count = df_active['explicit'].sum()
+
+        except Exception as e:
+            st.error(f"Error calculating header stats: {e}")
+            return
+
+        # --- Build the HTML string ---
+        header_html = f"""
+        <div style="
+            background: linear-gradient(135deg, #1a1a1a, #2a1a1a); 
+            border: 2px solid #1DB954; 
+            border-radius: 12px; 
+            padding: 15px; 
+            margin-bottom: 20px;
+        ">
+            <h4 style="color:#1DB954; margin:0 0 12px 0; text-align:left; font-size: 18px;">
+                📊 Active Dataset
+            </h4>
+            
+            <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap:10px;">
+                
+                <div style="text-align:center; padding:10px; background:#0a0a0a; border-radius:8px;">
+                    <div style="color:#1DB954; font-size:24px; font-weight:bold;">{active_tracks:,}</div>
+                    <div style="color:#888; font-size:12px;">tracks selected ({percentage:.0f}%)</div>
+                </div>
+                
+                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
+                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{year_range}</div>
+                    <div style="color:#888; font-size:12px; margin-top: 5px;">Years</div>
+                </div>
+                
+                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
+                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{artist_count:,}</div>
+                    <div style="color:#888; font-size:12px; margin-top: 5px;">Artists</div>
+                </div>
+                
+                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
+                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_pop:.0f}</div>
+                    <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Pop</div>
+                </div>
+                
+                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
+                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{explicit_count:,}</div>
+                    <div style="color:#888; font-size:12px; margin-top: 5px;">Explicit</div>
+                </div>
+                
+            </div>
+        </div>
+        """
+        
+        st.html(header_html)
+
+    # --------------------------------------------------------
+    # DASHBOARD SUMMARY CARDS (Corrected with Colors + Font Size)
+    # --------------------------------------------------------
+    def render_dashboard_summary():
+        """
+        Renders the 8-card (2x4 grid) summary for the
+        main dashboard, using custom HTML with colors AND consistent fonts.
+        """
+        st.subheader("📈 Dashboard Summary (Filtered)")
+
+        # 1. Define the HTML template for a single metric box.
+        #    This new template accepts background and border colors.
+        METRIC_BOX_HTML = """
+        <div style="
+            background: {bg_color}; 
+            border: 1px solid {border_color};
+            padding: 12px 8px; 
+            border-radius: 6px; 
+            text-align: center;
+            height: 100%; 
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        ">
+            <div style="color:#FFFFFF; font-weight:bold; font-size: 24px; line-height: 1.2; margin-bottom: 5px;">
+                {value}
+            </div>
+            <div style="color:#E0E0E0; font-size:12px;">
+                {label}
+            </div>
+        </div>
+        """
+        
+        # 2. Define our color palettes (mimicking st.info, st.success, etc.)
+        COLORS = {
+            "info": {"bg": "rgba(0, 104, 225, 0.1)", "border": "rgba(0, 104, 225, 0.5)"},
+            "success": {"bg": "rgba(9, 171, 59, 0.1)", "border": "rgba(9, 171, 59, 0.5)"},
+            "warning": {"bg": "rgba(255, 193, 7, 0.1)", "border": "rgba(255, 193, 7, 0.5)"},
+            "error": {"bg": "rgba(255, 4, 4, 0.1)", "border": "rgba(255, 4, 4, 0.5)"}
+        }
+        # Let's map your original card colors
+        CARD_COLORS = [
+            COLORS["info"],    # Card 1: Trending
+            COLORS["success"], # Card 2: Growth
+            COLORS["warning"], # Card 3: Mode
+            COLORS["error"],   # Card 4: Duration
+            COLORS["error"],   # Card 5: Explicit
+            COLORS["warning"], # Card 6: Artist
+            COLORS["success"], # Card 7: Key
+            COLORS["info"]     # Card 8: Vibe
+        ]
+
+
+        # 3. Set default values for all 8 stats
+        stats_values = ["N/A"] * 8
+        
+        # 4. Try to calculate all stats in one block
+        try:
+            if not df_filtered.empty:
+                
+                # --- Get aggregated & copied data ---
+                df_year_f = aggregate_by_year(df_filtered)
+                df_summary = df_filtered.copy()
+                
+                # --- Card 1 & 2 Calcs ---
+                if not df_year_f.empty:
+                    stats_values[0] = df_year_f.iloc[-1][['energy', 'danceability', 'valence']].idxmax().capitalize()
+                    
+                    if len(df_year_f) >= 10:
+                        current_pop = df_year_f.iloc[-1]['popularity']
+                        past_pop = df_year_f.iloc[-10]['popularity']
+                        if past_pop > 0:
+                            growth_rate = ((current_pop - past_pop) / past_pop) * 100
+                            stats_values[1] = f"{growth_rate:.1f}%"
+                        else:
+                            stats_values[1] = "Inf"
+                    else:
+                        stats_values[1] = "N/A (low data)"
+                
+                # --- Card 3, 4, 5, 6, 7, 8 Calcs ---
+                stats_values[2] = "Major" if df_summary['mode'].mean() > 0.5 else "Minor"
+                avg_duration = df_summary['duration_ms'].mean() / 60000
+                stats_values[3] = f"{avg_duration:.1f} min"
+                
+                explicit_pct = df_summary['explicit'].mean() * 100
+                stats_values[4] = f"{explicit_pct:.1f}%"
+                
+                df_summary['artist_clean'] = df_summary['artists'].str.replace(r"[\[\]'\"]", "", regex=True).str.split(',').str[0].str.strip()
+                if not df_summary.groupby('artist_clean')['popularity'].mean().empty:
+                    stats_values[5] = df_summary.groupby('artist_clean')['popularity'].mean().idxmax()
+                
+                top_key_index = df_summary['key'].mode()[0]
+                stats_values[6] = KEY_MAP.get(top_key_index, "N/A")
+                
+                vibe_val_num = df_summary['valence'].mean()
+                vibe_en_num = df_summary['energy'].mean()
+                vibe_mood = "Happy" if vibe_val_num > 0.5 else "Sad"
+                vibe_energy = "Energetic" if vibe_en_num > 0.6 else "Mellow"
+                stats_values[7] = f"{vibe_energy} & {vibe_mood}"
+
+        except Exception as e:
+            st.error(f"Error calculating summary stats: {e}")
+            # stats_values will remain ["N/A", "N/A", ...]
+        
+        # 5. Define labels for the cards
+        CARD_LABELS = [
+            "🔥 Trending Feature", "📊 10-Year Growth", "🎵 Dominant Mode", "⏱️ Avg Duration",
+            "🔞 Explicit Content", "🎤 Top Artist (Avg Pop)", "🎹 Top Key", "🎧 Overall Vibe"
+        ]
+
+        # 6. Render the 8-card grid
+        cols_row1 = st.columns(4)
+        cols_row2 = st.columns(4)
+        
+        for i in range(8):
+            col = cols_row1[i] if i < 4 else cols_row2[i-4]
+            with col:
+                st.html(METRIC_BOX_HTML.format(
+                    value=str(stats_values[i])[:20], # Truncate long values like artist names
+                    label=CARD_LABELS[i],
+                    bg_color=CARD_COLORS[i]["bg"],
+                    border_color=CARD_COLORS[i]["border"]
+                ))
+
+        st.divider()
+
+        
+    # ========================================================
+    #
+    # VISUALIZATION FUNCTIONS
+    #
+    # ========================================================
+
+    # --------------------------------------------------------
+    # VIZ 1: EVOLUTION (Corrected: No arguments)
+    # --------------------------------------------------------
+    def render_evolution():
         st.subheader("1. Evolution of ALL Audio Features Over Decades")
 
-        df_year_f = aggregate_by_year(df_filtered)
+        # --- FIX: Get data inside the function ---
+        # This function can "see" the 'df_filtered' and 'aggregate_by_year'
+        # variables from your main script.
+        try:
+            df_year_f = aggregate_by_year(df_filtered)
+        except Exception as e:
+            st.error(f"Error during aggregation: {e}")
+            return
+
+        # --- FIX: Add empty data check ---
+        if df_year_f.empty:
+            st.warning("No data available for the selected filters.")
+            return
 
         features = ['danceability','energy','valence','acousticness','instrumentalness','speechiness','liveness','loudness']
         selected = st.multiselect("Select Audio Features:", features, default=features, key="evo_features")
         normalize = st.checkbox("Normalize", value=False, key="evo_normalize")
         compare = st.checkbox("Compare two decades", value=False, key="evo_compare")
+
+        # --- FIX: Add check for empty selection ---
+        if not selected:
+            st.info("Please select at least one feature to display.")
+            return
 
         base = df_year_f[["year"] + selected].copy()
         if normalize:
@@ -1208,8 +1695,1761 @@ if music_data is not None:
 
         st.plotly_chart(fig, use_container_width=True)
 
+                
+    # --------------------------------------------------------
+    # VIZ 2: CORRELATION (Corrected: No arguments)
+    # --------------------------------------------------------
+    def render_correlation():
+        st.subheader("2. Correlation Analysis: Popularity vs Audio Features")
+        st.info("**🔍 Key Questions:** Which audio feature best predicts commercial success? ...")
+        
+        col_viz2_1, col_viz2_2, col_viz2_3 = st.columns(3)
+        
+        with col_viz2_1:
+            selected_feature = st.selectbox(
+                "Select Audio Feature:",
+                ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 'speechiness'],
+                key="feature_selector"
+            )
+        
+        with col_viz2_2:
+            viz2_type = st.radio(
+                "Visualization Type:",
+                ["Scatter with Trend", "Hexbin Density", "Box Plot by Bins"],
+                key="viz2_type"
+            )
+        
+        with col_viz2_3:
+            add_percentiles = st.checkbox("Show percentile lines", value=False, key="percentiles_viz2")
+        
+        # --- FIX: Get data inside the function ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+            
+        df_sample = df_filtered.sample(min(5000, len(df_filtered)), random_state=42)
+        
+        if viz2_type == "Scatter with Trend":
+            fig_correlation = px.scatter(
+                df_sample, x=selected_feature, y='popularity',
+                title=f'Popularity vs {selected_feature.capitalize()}',
+                opacity=0.6, trendline='ols',
+                labels={selected_feature: f'{selected_feature.capitalize()} (0-1)', 'popularity': 'Popularity Score'}
+            )
+            if add_percentiles:
+                p25 = df_sample[selected_feature].quantile(0.25)
+                p75 = df_sample[selected_feature].quantile(0.75)
+                fig_correlation.add_vline(x=p25, line_dash="dash", line_color="red", opacity=0.5)
+                fig_correlation.add_vline(x=p75, line_dash="dash", line_color="green", opacity=0.5)
+                
+        elif viz2_type == "Hexbin Density":
+            fig_correlation = px.density_heatmap(
+                df_sample, x=selected_feature, y='popularity',
+                title=f'Density: Popularity vs {selected_feature.capitalize()}',
+                labels={selected_feature: f'{selected_feature.capitalize()} (0-1)', 'popularity': 'Popularity Score'},
+                nbinsx=30, nbinsy=20
+            )
+        else:  # Box Plot by Bins
+            df_sample['feature_bin'] = pd.cut(df_sample[selected_feature], bins=5, 
+                                            labels=['Very Low', 'Low', 'Medium', 'High', 'Very High'])
+            fig_correlation = px.box(
+                df_sample, x='feature_bin', y='popularity',
+                title=f'Popularity Distribution by {selected_feature.capitalize()} Levels',
+                labels={'feature_bin': f'{selected_feature.capitalize()} Level', 'popularity': 'Popularity Score'}
+            )
+        
+        st.plotly_chart(fig_correlation, use_container_width=True)
+        
+        correlation = df_filtered[selected_feature].corr(df_filtered['popularity'])
+        st.metric(f"Correlation Coefficient", f"{correlation:.3f}", 
+                delta=f"{'Positive' if correlation > 0 else 'Negative'} correlation")
+        
+    # --------------------------------------------------------
+    # VIZ 3: GENRE DNA (Corrected)
+    # --------------------------------------------------------
+    # We remove 'df_filtered' from the arguments, because this function
+    # will now get the filtered data itself, just like you wanted.
+    def render_genre_dna(): 
+        st.subheader("3. Genre DNA: Audio Feature Signatures")
+        st.info("**🔍 Strategic Questions:** What is the unique 'DNA' of each genre? ...")
+
+        # --- THIS IS THE FIX ---
+        # 1. We get the DYNAMICALLY FILTERED data using your helper functions.
+        #    This assumes 'df_genres' and 'filters' are defined in the global scope
+        #    before this function is called (which they are in your app).
+        try:
+            df_genres_f = align_genre_frame(df_genres, filters)
+            df_genre_agg = aggregate_by_genre(df_genres_f)
+        except Exception as e:
+            st.error(f"Error aggregating genre data: {e}")
+            return
+
+        # 2. Check if the filters returned any data
+        if df_genre_agg.empty:
+            st.warning("No genre data available for the selected filters.")
+            return
+        # --- END OF FIX ---
+
+        col_genre1, col_genre2 = st.columns(2)
+        
+        with col_genre1:
+            genre_feature = st.selectbox(
+                "Select Audio Feature:",
+                ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
+                'speechiness', 'liveness', 'loudness', 'tempo'],
+                key="genre_feature_selector"
+            )
+        
+        with col_genre2:
+            genre_viz_type = st.radio(
+                "Visualization:",
+                ["Box Plot", "Radar Chart"],
+                horizontal=True,
+                key="genre_viz_type"
+            )
+        
+        if genre_viz_type == "Box Plot":
+            # Get top 15 genres *from the filtered data*
+            top_genres_filtered = df_genre_agg.nlargest(15, 'popularity')
+            
+            fig_genre = px.box(
+                top_genres_filtered, # Use the filtered data
+                x='genres',
+                y=genre_feature,
+                color='genres',
+                title=f'{genre_feature.capitalize()} Distribution Across Top 15 Genres (Filtered)',
+                labels={'genres': 'Genre', genre_feature: f'{genre_feature.capitalize()}'}
+            )
+            fig_genre.update_layout(showlegend=False, xaxis_tickangle=-45)
+            
+        else:  # Radar Chart
+            import plotly.graph_objects as go
+            
+            # Get top 8 genres *from the filtered data*
+            top_8_genres_filtered = df_genre_agg.nlargest(8, 'popularity')
+            features_for_radar = ['energy', 'danceability', 'valence', 'acousticness', 'speechiness']
+            
+            fig_genre = go.Figure()
+            
+            for _, genre_row in top_8_genres_filtered.iterrows(): # Use the filtered data
+                values = [genre_row[feat] for feat in features_for_radar]
+                fig_genre.add_trace(go.Scatterpolar(
+                    r=values,
+                    theta=features_for_radar,
+                    fill='toself',
+                    name=genre_row['genres'][:20]
+                ))
+            
+            fig_genre.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 1]
+                    )),
+                showlegend=True,
+                title="Genre DNA: Audio Feature Signatures (Filtered)"
+            )
+        
+        st.plotly_chart(fig_genre, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 4: EXPLICIT STRATEGY (Corrected: No arguments, local copy)
+    # --------------------------------------------------------
+    def render_explicit():
+        st.subheader("4. Explicit Content: Commercial Strategy Analysis")
+        st.info("**🔍 Strategic Questions:** Is explicit content a successful commercial strategy? Which genres benefit most from explicit content? Should artists release both clean and explicit versions?")
+        
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+
+        # --- FIX: Create a local copy to avoid mutation errors ---
+        df_explicit = df_filtered.copy()
+        df_explicit['explicit_label'] = df_explicit['explicit'].map({0: 'Clean', 1: 'Explicit'})
+        
+        col_exp1, col_exp2 = st.columns(2)
+        
+        with col_exp1:
+            # Popularity comparison
+            fig_explicit = px.violin(
+                df_explicit[df_explicit['popularity'] > 0], # Use local copy
+                x='explicit_label',
+                y='popularity',
+                color='explicit_label',
+                title='Popularity Distribution: Clean vs Explicit',
+                labels={'explicit_label': 'Content Type', 'popularity': 'Popularity Score'}
+            )
+            st.plotly_chart(fig_explicit, use_container_width=True)
+        
+        with col_exp2:
+            # Feature comparison
+            explicit_feature = st.selectbox(
+                "Compare by feature:",
+                ['energy', 'danceability', 'valence', 'speechiness'],
+                key="explicit_feature"
+            )
+            
+            fig_explicit_feat = px.box(
+                df_explicit, # Use local copy
+                x='explicit_label',
+                y=explicit_feature,
+                color='explicit_label',
+                title=f'{explicit_feature.capitalize()} by Content Type',
+                labels={'explicit_label': 'Content Type', explicit_feature: explicit_feature.capitalize()}
+            )
+            st.plotly_chart(fig_explicit_feat, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 5: FEATURE RELATIONSHIPS (Corrected: No arguments)
+    # --------------------------------------------------------
+    def render_feature_relationships():
+        st.subheader("5. Feature Relationships: The Music Formula")
+        st.info("**🔍 Strategic Questions:** Which features must be balanced together? Can we identify 'formula' combinations for different popularity levels? What trade-offs do producers make?")
+        
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+            
+        # Toggle between correlation matrix and cluster analysis
+        analysis_type = st.radio(
+            "Analysis Type:",
+            ["Correlation Matrix", "Feature Pairs Analysis", "Success Formula"],
+            horizontal=True,
+            key="analysis_type_viz5"
+        )
+        
+        audio_features = ['danceability', 'energy', 'valence', 'acousticness', 
+                        'instrumentalness', 'liveness', 'loudness', 'speechiness', 'popularity']
+        
+        if analysis_type == "Correlation Matrix":
+            correlation_matrix = df_filtered[audio_features].corr()
+            
+            fig_heatmap = px.imshow(
+                correlation_matrix,
+                title='Correlation Between Audio Features',
+                text_auto='.2f',
+                aspect='auto',
+                color_continuous_scale='RdBu_r'
+            )
+            st.plotly_chart(fig_heatmap, use_container_width=True)
+            
+        elif analysis_type == "Feature Pairs Analysis":
+            correlation_matrix = df_filtered[audio_features].corr()
+            
+            # Get correlations with popularity
+            pop_corr = correlation_matrix['popularity'].drop('popularity').sort_values(ascending=False)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Top Positive Correlations with Popularity:**")
+                for feat, corr in pop_corr.head(3).items():
+                    st.write(f"• {feat}: {corr:.3f}")
+            
+            with col2:
+                st.markdown("**Top Negative Correlations with Popularity:**")
+                for feat, corr in pop_corr.tail(3).items():
+                    st.write(f"• {feat}: {corr:.3f}")
+                    
+        else:  # Success Formula
+            # --- This .copy() is perfect, great job! ---
+            df_success = df_filtered.copy()
+            
+            # Segment songs by popularity
+            df_success['success_level'] = pd.cut(df_success['popularity'], 
+                                                bins=[0, 30, 60, 100],
+                                                labels=['Low', 'Medium', 'High'])
+            
+            # Calculate mean features by success level
+            # (Slicing [:-1] to remove 'popularity' itself from the features)
+            success_formula = df_success.groupby('success_level')[audio_features[:-1]].mean()
+            
+            fig_formula = px.bar(
+                success_formula.T,
+                title="The Success Formula: Average Features by Popularity Level",
+                labels={'index': 'Audio Feature', 'value': 'Average Value'},
+                barmode='group'
+            )
+            st.plotly_chart(fig_formula, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 6: TEMPORAL TRENDS (Corrected: No arguments, local copy)
+    # --------------------------------------------------------
+    def render_temporal():
+        st.subheader("6. Temporal Trends: Predicting the Future of Music")
+        st.info("**🔍 Strategic Questions:** Can we predict the next trend? Are songs converging to a standard formula? What features are becoming obsolete?")
+        
+        # --- FIX: Get data inside the function and make a local copy ---
+        try:
+            # Assumes 'aggregate_by_year' and 'df_filtered' are in global scope
+            df_year_f = aggregate_by_year(df_filtered).copy()
+        except Exception as e:
+            st.error(f"Error during aggregation: {e}")
+            return
+
+        # --- FIX: Check for empty data ---
+        if df_year_f.empty:
+            st.warning("No data available for the selected filters.")
+            return
+            
+        col_tempo1, col_tempo2 = st.columns(2)
+        
+        # Convert duration to minutes
+        df_year_f["duration_min"] = df_year_f["duration_ms"] / 60000.0
+
+        with col_tempo1:
+            # Add trend prediction toggle
+            show_prediction = st.checkbox("Show trend projection", value=False, key="prediction_duration")
+            
+            fig_duration = px.line(
+                df_year_f[df_year_f["year"] >= 1960],
+                x="year", y="duration_min",
+                title="Song Duration: The Attention Span Crisis",
+                labels={"duration_min": "Duration (minutes)", "year": "Year"}
+            )
+            
+            if show_prediction:
+                # Simple linear projection
+                try:
+                    from scipy import stats # Import is safe inside the try block
+                    
+                    # Use the already calculated df_year_f
+                    recent_years_agg = df_year_f[df_year_f['year'] >= 2000]
+                    
+                    # Check if we have valid data
+                    if len(recent_years_agg) > 1 and not recent_years_agg['duration_min'].isna().all():
+                        slope, intercept, _, _, _ = stats.linregress(recent_years_agg['year'], recent_years_agg['duration_min'])
+                        future_years = list(range(2020, 2031))
+                        future_duration = [slope * year + intercept for year in future_years]
+                        fig_duration.add_scatter(x=future_years, y=future_duration, mode='lines', 
+                                                name='Projection', line=dict(dash='dash', color='red'))
+                except ImportError:
+                    st.warning("Scipy module not found. Skipping trend projection.")
+                except Exception as e:
+                    st.warning(f"Could not calculate trend: {e}")
+            
+            st.plotly_chart(fig_duration, use_container_width=True)
+        
+        with col_tempo2:
+            fig_tempo = px.line(
+                df_year_f[df_year_f['year'] >= 1960],
+                x='year',
+                y='tempo',
+                title='Tempo Evolution: The BPM Arms Race',
+                labels={'tempo': 'Tempo (BPM)', 'year': 'Year'}
+            )
+            st.plotly_chart(fig_tempo, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 7: ARTIST SUCCESS PATTERNS (Corrected: No arguments)
+    # --------------------------------------------------------
+    def render_artists():
+        st.subheader("7. Artist Success Patterns: One-Hit Wonder vs Consistency")
+        st.info("**🔍 Strategic Questions:** What separates consistent hitmakers from one-hit wonders? Is it better to release many average songs or few excellent ones? How do successful artists maintain their sound signature?")
+        
+        # --- FIX: Get DYNAMICALLY FILTERED artist data first ---
+        try:
+            # Assumes 'aggregate_by_artist' and 'df_filtered' are in global scope
+            df_artist_f = aggregate_by_artist(df_filtered)
+        except Exception as e:
+            st.error(f"Error during artist aggregation: {e}")
+            return
+
+        # Check if filters returned any data
+        if df_artist_f.empty:
+            st.warning("No artist data available for the selected filters.")
+            return
+        # --- END OF FIX ---
+
+        artist_strategy = st.radio(
+            "Analysis Focus:",
+            ["Top 50 Artists Overview", "Consistency Analysis", "Feature Signature (Top 5)"],
+            horizontal=True,
+            key="artist_strategy"
+        )
+        
+        # --- FIX: Use the filtered artist dataframe ---
+        top_artists_filtered = df_artist_f.nlargest(50, 'popularity')
+        
+        if artist_strategy == "Top 50 Artists Overview":
+            fig_artists = px.scatter(
+                top_artists_filtered, # Use filtered data
+                x='count',
+                y='popularity',
+                size='energy',
+                color='valence',
+                hover_data=['artist_clean'], # Use the clean artist name
+                title='Artist Strategy: Volume vs Quality (Filtered)',
+                labels={'count': 'Number of Tracks', 'popularity': 'Average Popularity', 'valence': 'Valence'}
+            )
+            
+            # Add quadrant lines based on filtered data
+            median_count = top_artists_filtered['count'].median()
+            median_pop = top_artists_filtered['popularity'].median()
+            fig_artists.add_hline(y=median_pop, line_dash="dash", line_color="gray", opacity=0.5)
+            fig_artists.add_vline(x=median_count, line_dash="dash", line_color="gray", opacity=0.5)
+            
+            # Add quadrant labels
+            fig_artists.add_annotation(x=median_count*0.3, y=median_pop*1.2, text="Quality over Quantity", 
+                                    showarrow=False, font=dict(color="green"))
+            fig_artists.add_annotation(x=median_count*1.7, y=median_pop*1.2, text="Consistent Hitmakers", 
+                                    showarrow=False, font=dict(color="#89ccff"))
+            
+            st.plotly_chart(fig_artists, use_container_width=True)
+
+        elif artist_strategy == "Consistency Analysis":
+            # Calculate coefficient of variation (std/mean) for each artist
+            artist_consistency = []
+            
+            # --- FIX: Loop over filtered artists and search in df_filtered ---
+            for artist_name in top_artists_filtered['artist_clean']:
+                # Search for this artist's songs *within the filtered tracklist*
+                # Note: str.contains is not perfect, but it's what your original code used.
+                artist_songs = df_filtered[df_filtered['artists'].str.contains(artist_name, na=False, case=True)]['popularity']
+                
+                if len(artist_songs) > 1:
+                    cv = artist_songs.std() / artist_songs.mean() if artist_songs.mean() > 0 else 0
+                    artist_consistency.append({'artist': artist_name[:20], 'consistency': 1 - cv, 
+                                            'avg_popularity': artist_songs.mean()})
+            
+            consistency_df = pd.DataFrame(artist_consistency)
+            
+            if consistency_df.empty:
+                st.info("Could not calculate artist consistency. (No artist matches with >1 song found in the filtered data).")
+                fig_artists = go.Figure() # Create empty figure
+                fig_artists.update_layout(title='Artist Consistency Score (No data to display)')
+            else:
+                fig_artists = px.bar(
+                    consistency_df.sort_values('consistency', ascending=True),
+                    x='consistency',
+                    y='artist',
+                    orientation='h',
+                    color='avg_popularity',
+                    title='Artist Consistency Score (Higher = More Consistent)',
+                    labels={'consistency': 'Consistency Score', 'artist': 'Artist', 
+                            'avg_popularity': 'Avg Popularity'}
+                )
+            
+            st.plotly_chart(fig_artists, use_container_width=True)
+                
+        else:  # Feature Signature
+            # --- FIX: Use the filtered top 5 artists ---
+            top_5_artists_filtered = top_artists_filtered.head(5)
+            features_for_signature = ['energy', 'danceability', 'valence', 'acousticness', 'speechiness']
+            
+            fig_artists = go.Figure()
+            
+            for _, artist_row in top_5_artists_filtered.iterrows(): # Use filtered data
+                values = [artist_row[feat] for feat in features_for_signature]
+                fig_artists.add_trace(go.Scatterpolar(
+                    r=values,
+                    theta=features_for_signature,
+                    fill='toself',
+                    name=artist_row['artist_clean'][:20] # Use clean name
+                ))
+            
+            fig_artists.update_layout(
+                polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+                showlegend=True,
+                title="Artist Sound Signatures: What Makes Them Unique"
+            )
+            
+            st.plotly_chart(fig_artists, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 8: FEATURE EXPLORER (Corrected: No arguments)
+    # --------------------------------------------------------
+    def render_explorer():
+        st.subheader("8. Feature Interaction Explorer: Finding the Sweet Spot")
+        st.info("**🔍 Strategic Questions:** What feature combinations create viral hits? Are there 'dead zones' to avoid? How do different eras prefer different feature combinations?")
+        
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+            
+        col_exp1, col_exp2, col_exp3 = st.columns(3)
+        
+        with col_exp1:
+            feature_x = st.selectbox(
+                "X-axis Feature:",
+                ['danceability', 'energy', 'valence', 'acousticness', 'instrumentalness', 
+                'speechiness', 'liveness', 'loudness', 'tempo', 'popularity'],
+                index=0,
+                key="density_x_feature"
+            )
+        
+        with col_exp2:
+            feature_y = st.selectbox(
+                "Y-axis Feature:",
+                ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
+                'speechiness', 'liveness', 'loudness', 'tempo', 'popularity'],
+                index=1, # Set a different default index from X
+                key="density_y_feature"
+            )
+        
+        with col_exp3:
+            viz_style = st.radio(
+                "Style:",
+                ["Density Heatmap", "Scatter with Size", "Contour Plot"],
+                key="viz_style_8"
+            )
+        
+        # This filter logic is excellent:
+        # Options are from the full 'df' (good!)
+        # Data is filtered from 'df_filtered' (also good!)
+        decade_filter_8 = st.select_slider(
+            "Filter by Decade Range (for this viz):",
+            options=sorted(df['decade'].unique()), # Uses original 'df'
+            value=(1990, 2020),
+            key="decade_filter_8"
+        )
+        
+        # Filter data
+        df_density = df_filtered[(df_filtered['decade'] >= decade_filter_8[0]) & 
+                                (df_filtered['decade'] <= decade_filter_8[1])]
+        
+        # Check if the *local* filter returned data
+        if df_density.empty:
+            st.warning("No data available for the selected *local decade filter*.")
+            return
+
+        df_density_sample = df_density.sample(min(10000, len(df_density)), random_state=42)
+        
+        if viz_style == "Density Heatmap":
+            fig_density = px.density_heatmap(
+                df_density_sample,
+                x=feature_x,
+                y=feature_y,
+                title=f'Feature Sweet Spots: {feature_x.capitalize()} vs {feature_y.capitalize()}',
+                labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()},
+                nbinsx=30,
+                nbinsy=30,
+                color_continuous_scale='Viridis'
+            )
+            
+        elif viz_style == "Scatter with Size":
+            fig_density = px.scatter(
+                df_density_sample.sample(min(2000, len(df_density_sample))),
+                x=feature_x,
+                y=feature_y,
+                size='popularity',
+                color='decade',
+                title=f'Feature Combinations: Size = Popularity',
+                labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()},
+                opacity=0.6
+            )
+            
+        else:  # Contour Plot
+            fig_density = px.density_contour(
+                df_density_sample,
+                x=feature_x,
+                y=feature_y,
+                title=f'Density Contours: {feature_x.capitalize()} vs {feature_y.capitalize()}',
+                labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()}
+            )
+            fig_density.update_traces(contours_coloring="fill", contours_showlabels=True)
+        
+        st.plotly_chart(fig_density, use_container_width=True)
+        
+        # Show insights
+        high_pop_threshold = df_density['popularity'].quantile(0.75)
+        sweet_spot_df = df_density[(df_density['popularity'] > high_pop_threshold)]
+        
+        if len(sweet_spot_df) > 0:
+            col_insight1, col_insight2 = st.columns(2)
+            with col_insight1:
+                st.metric(f"Sweet Spot {feature_x.capitalize()}", 
+                        f"{sweet_spot_df[feature_x].mean():.2f}",
+                        f"±{sweet_spot_df[feature_x].std():.2f}")
+            with col_insight2:
+                st.metric(f"Sweet Spot {feature_y.capitalize()}", 
+                        f"{sweet_spot_df[feature_y].mean():.2f}",
+                        f"±{sweet_spot_df[feature_y].std():.2f}")
+
+    # --------------------------------------------------------
+    # VIZ 9: KEY & MODE (Corrected: No arguments, local copy)
+    # --------------------------------------------------------
+    def render_keys():
+        st.subheader("9. Musical Key & Mode: The Emotional Blueprint")
+        st.info("**🔍 Strategic Questions:** Do certain keys resonate better with audiences? Should artists favor major (happy) or minor (sad) keys? Is there a 'golden key' for hits?")
+        
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+
+        # --- FIX: Create a local copy to avoid mutation errors ---
+        df_keys = df_filtered.copy()
+        
+        # Map keys to musical notation
+        key_mapping = {0: 'C', 1: 'C#', 2: 'D', 3: 'D#', 4: 'E', 5: 'F',
+                    6: 'F#', 7: 'G', 8: 'G#', 9: 'A', 10: 'A#', 11: 'B'}
+        
+        # Add new columns to the local copy
+        df_keys['key_name'] = df_keys['key'].map(key_mapping)
+        df_keys['mode_name'] = df_keys['mode'].map({0: 'Minor', 1: 'Major'})
+        
+        key_analysis = st.radio(
+            "Analysis Type:",
+            ["Distribution", "Popularity by Key", "Emotional Impact"],
+            horizontal=True,
+            key="key_analysis"
+        )
+        
+        if key_analysis == "Distribution":
+            # Count combinations using the local copy
+            key_mode_counts = df_keys.groupby(['key_name', 'mode_name']).size().reset_index(name='count')
+            
+            fig_keys = px.bar(
+                key_mode_counts,
+                x='key_name',
+                y='count',
+                color='mode_name',
+                title='Distribution of Musical Keys (Major vs Minor)',
+                labels={'key_name': 'Musical Key', 'count': 'Number of Songs', 'mode_name': 'Mode'},
+                category_orders={'key_name': ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']}
+            )
+            
+        elif key_analysis == "Popularity by Key":
+            # Average popularity by key using the local copy
+            key_popularity = df_keys.groupby(['key_name', 'mode_name'])['popularity'].mean().reset_index()
+            
+            fig_keys = px.bar(
+                key_popularity,
+                x='key_name',
+                y='popularity',
+                color='mode_name',
+                title='Average Popularity by Musical Key',
+                labels={'key_name': 'Musical Key', 'popularity': 'Average Popularity', 'mode_name': 'Mode'},
+                category_orders={'key_name': ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']},
+                barmode='group'
+            )
+            
+        else:  # Emotional Impact
+            # Compare valence (happiness) using the local copy
+            fig_keys = px.box(
+                df_keys,
+                x='mode_name',
+                y='valence',
+                color='mode_name',
+                title='Emotional Impact: Valence in Major vs Minor Keys',
+                labels={'mode_name': 'Mode', 'valence': 'Valence (Happiness)'}
+            )
+        
+        st.plotly_chart(fig_keys, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 10: DECADE EVOLUTION (Corrected: No arguments, safe checks)
+    # --------------------------------------------------------
+    def render_decades():
+        st.subheader("10. Decade Evolution: The Sound of Generations")
+        st.info("**🔍 Strategic Questions:** How homogeneous is modern music? Which decades had the most experimental music? Can we identify the 'signature sound' of each generation?")
+        
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+            
+        col_decade1, col_decade2 = st.columns(2)
+        
+        with col_decade1:
+            decade_feature = st.selectbox(
+                "Select Feature:",
+                ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
+                'speechiness', 'liveness', 'loudness'],
+                key="decade_feature_selector"
+            )
+        
+        with col_decade2:
+            show_variance = st.checkbox("Show variance analysis", value=False, key="variance_decade")
+        
+        # Filter for relevant decades (this .copy() is perfect)
+        df_decades = df_filtered['decade'].copy()
+        
+        # --- FIX: Add second check for locally filtered data ---
+        if df_decades.empty:
+            st.warning("No data available for decades in your current selection.")
+            return
+
+        if not show_variance:
+            fig_decade_box = px.box(
+                df_decades,
+                x='decade',
+                y=decade_feature,
+                color='decade',
+                title=f'{decade_feature.capitalize()} Evolution by Decade',
+                labels={'decade': 'Decade', decade_feature: f'{decade_feature.capitalize()}'}
+            )
+            fig_decade_box.update_layout(showlegend=False)
+            
+        else:
+            # Calculate variance by decade
+            variance_by_decade = df_decades.groupby('decade')[decade_feature].agg(['mean', 'std']).reset_index()
+            
+            # --- FIX: Prevent ZeroDivisionError ---
+            variance_by_decade['cv'] = variance_by_decade.apply(
+                lambda row: row['std'] / row['mean'] if row['mean'] != 0 else 0, axis=1
+            )
+            
+            fig_decade_box = px.line(
+                variance_by_decade,
+                x='decade',
+                y='cv',
+                title=f'Musical Diversity: {decade_feature.capitalize()} Variance Over Time',
+                labels={'decade': 'Decade', 'cv': 'Coefficient of Variation'},
+                markers=True
+            )
+            fig_decade_box.add_hline(y=variance_by_decade['cv'].mean(), 
+                                line_dash="dash", line_color="red", opacity=0.5)
+        
+        st.plotly_chart(fig_decade_box, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 11: GENRE ECONOMICS (Corrected: No arguments, fully dynamic)
+    # --------------------------------------------------------
+    def render_genre_econ():
+        st.subheader("11. Genre Economics: Market Share & Commercial Viability")
+        st.info("**🔍 Strategic Questions:** Which genres dominate the market? Are niche genres more loyal? Where should new artists position themselves for maximum impact?")
+        
+        # --- FIX: Get DYNAMICALLY FILTERED data ONCE at the top ---
+        try:
+            # Assumes 'align_genre_frame', 'aggregate_by_genre', 
+            # 'music_data', and 'filters' are in global scope
+            
+            # gframe_filtered is the filtered *track list* with genres
+            gframe_filtered = align_genre_frame(music_data["with_genres"], filters)
+            # df_genres_f is the *aggregated* data (mean values per genre)
+            df_genres_f = aggregate_by_genre(gframe_filtered) 
+            
+        except Exception as e:
+            st.error(f"Error aggregating genre data: {e}")
+            return
+
+        # Check if filters returned any data
+        if gframe_filtered.empty or df_genres_f.empty:
+            st.warning("No genre data available for the selected filters.")
+            return
+        # --- END OF FIX ---
+            
+        genre_view = st.radio(
+            "View:",
+            ["Top Genres by Popularity", "Genre Market Share", "Genre Loyalty Index"],
+            horizontal=True,
+            key="genre_view"
+        )
+        
+        if genre_view == "Top Genres by Popularity":
+            # This was already correct, just uses our new variable
+            top_genres_pop = df_genres_f.nlargest(20, "popularity")[["genres","popularity"]]
+            
+            fig_top_genres = px.bar(
+                top_genres_pop,
+                x='popularity',
+                y='genres',
+                orientation='h',
+                color='popularity',
+                color_continuous_scale='Viridis',
+                title='Genre Power Rankings: Commercial Appeal (Filtered)',
+                labels={'genres': 'Genre', 'popularity': 'Average Popularity'}
+            )
+            fig_top_genres.update_layout(height=600, yaxis={'categoryorder':'total ascending'})
+            
+        elif genre_view == "Genre Market Share":
+            # --- FIX: Use the filtered gframe_filtered ---
+            genre_counts = gframe_filtered['genres'].value_counts().head(15)
+            
+            fig_top_genres = px.pie(
+                values=genre_counts.values,
+                names=genre_counts.index,
+                title='Genre Market Share by Track Volume (Filtered)'
+            )
+            
+        else:  # Genre Loyalty Index
+            genre_loyalty = []
+            
+            # --- FIX 1: Iterate over the filtered genre list ---
+            for genre in df_genres_f.nlargest(15, 'popularity')['genres']:
+                
+                # --- FIX 2: Search for songs in the filtered track list ---
+                genre_data = gframe_filtered[gframe_filtered['genres'] == genre]
+                
+                if len(genre_data) > 10:
+                    loyalty = 1 / (genre_data['popularity'].std() + 1)  # +1 to avoid division by zero
+                    genre_loyalty.append({'genre': genre[:20], 'loyalty_index': loyalty * 100,
+                                        'avg_popularity': genre_data['popularity'].mean()})
+            
+            if not genre_loyalty:
+                st.info("Not enough data to calculate genre loyalty for the current filter.")
+                fig_top_genres = go.Figure().update_layout(title='Genre Loyalty vs Popularity: Finding Your Niche')
+            else:
+                loyalty_df = pd.DataFrame(genre_loyalty).sort_values('loyalty_index', ascending=True)
+                
+                fig_top_genres = px.scatter(
+                    loyalty_df,
+                    x='avg_popularity',
+                    y='loyalty_index',
+                    text='genre',
+                    title='Genre Loyalty vs Popularity: Finding Your Niche (Filtered)',
+                    labels={'loyalty_index': 'Loyalty Index', 'avg_popularity': 'Average Popularity'}
+                )
+                fig_top_genres.update_traces(textposition='top center')
+            
+        st.plotly_chart(fig_top_genres, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 12: TEMPO ZONES (Corrected: No arguments, safe checks)
+    # --------------------------------------------------------
+    def render_tempo():
+        st.subheader("12. The Tempo Formula: BPM Success Zones")
+        st.info("**🔍 Strategic Questions:** Is there an optimal BPM for chart success? Do different decades prefer different tempos? Should producers target specific BPM ranges?")
+        
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+
+        # --- This .copy() is perfect! ---
+        df_tempo = df_filtered.copy()
+        
+        # --- FIX: Use np.inf for the last bin to include all tempos ---
+        df_tempo['bpm_zone'] = pd.cut(df_tempo['tempo'], 
+                                    bins=[0, 80, 100, 120, 140, np.inf],
+                                    labels=['Slow (<80)', 'Moderate (80-100)', 
+                                            'Dance (100-120)', 'Fast (120-140)', 'Very Fast (>140)'])
+        
+        tempo_analysis = st.radio(
+            "Analysis:",
+            ["Density Map", "Success Zones", "Evolution"],
+            horizontal=True,
+            key="tempo_analysis"
+        )
+        
+        if tempo_analysis == "Density Map":
+            df_tempo_sample = df_tempo.sample(min(10000, len(df_tempo)))
+            
+            if df_tempo_sample.empty:
+                st.warning("No data to display for Density Map.")
+                return
+
+            fig_tempo_density = px.density_heatmap(
+                df_tempo_sample,
+                x='tempo',
+                y='popularity',
+                title='Tempo-Popularity Heat Map: Where Success Lives',
+                labels={'tempo': 'Tempo (BPM)', 'popularity': 'Popularity Score'},
+                nbinsx=40,
+                nbinsy=30
+            )
+            
+        elif tempo_analysis == "Success Zones":
+            bpm_success = df_tempo.groupby('bpm_zone', observed=True)['popularity'].agg(['mean', 'std', 'count']).reset_index()
+            
+            if bpm_success.empty:
+                st.warning("No data to display for Success Zones.")
+                return
+
+            fig_tempo_density = px.bar(
+                bpm_success,
+                x='bpm_zone',
+                y='mean',
+                error_y='std',
+                title='Popularity by BPM Zone',
+                labels={'bpm_zone': 'BPM Zone', 'mean': 'Average Popularity'},
+                color='mean',
+                color_continuous_scale='RdYlGn'
+            )
+            
+        else:  # Evolution
+            tempo_evolution = df_tempo.groupby(['decade', 'bpm_zone'], observed=True).size().reset_index(name='count')
+            tempo_evolution = tempo_evolution[tempo_evolution['decade'] >= 1960]
+            
+            if tempo_evolution.empty:
+                st.warning("No data to display for Tempo Evolution.")
+                return
+
+            fig_tempo_density = px.bar(
+                tempo_evolution,
+                x='decade',
+                y='count',
+                color='bpm_zone',
+                title='Evolution of Tempo Preferences Over Decades',
+                labels={'decade': 'Decade', 'count': 'Number of Tracks'},
+                barnorm='percent'
+            )
+        
+        st.plotly_chart(fig_tempo_density, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 13: EXPLICIT OVER TIME (Corrected: No arguments, fully dynamic)
+    # --------------------------------------------------------
+    def render_explicit_time():
+        st.subheader("13. Explicit Content Evolution: Cultural Shifts & Commercial Impact")
+        st.info("**🔍 Strategic Questions:** When did explicit content become mainstream? Which genres pioneered explicit content? Is the trend reversing or accelerating?")
+        
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+            
+        explicit_view = st.radio(
+            "View:",
+            ["Timeline", "By Genre", "Commercial Impact"],
+            horizontal=True,
+            key="explicit_view"
+        )
+        
+        if explicit_view == "Timeline":
+            # This was already correct, as it uses df_filtered.
+            explicit_years = (df_filtered[df_filtered["year"] >= 1960]
+                            .groupby(["year","explicit"])
+                            .size().reset_index(name="count"))
+            
+            if explicit_years.empty:
+                st.warning("No data for timeline view.")
+                return
+
+            explicit_years["explicit_label"] = explicit_years["explicit"].map({0:"Clean",1:"Explicit"})
+            
+            fig_explicit_years = px.area(
+                explicit_years,
+                x='year',
+                y='count',
+                color='explicit_label',
+                title='The Rise of Explicit Content (1960-2020)',
+                labels={'year': 'Year', 'count': 'Number of Tracks', 'explicit_label': 'Content Type'},
+                color_discrete_map={'Clean': '#2E7D32', 'Explicit': '#D32F2F'}
+            )
+            
+        elif explicit_view == "By Genre":
+            # --- FIX: Use helper functions to get filtered genre data ---
+            try:
+                gframe_filtered = align_genre_frame(music_data["with_genres"], filters)
+                df_genres_f = aggregate_by_genre(gframe_filtered)
+            except Exception as e:
+                st.error(f"Error aggregating genre data: {e}")
+                return
+            
+            if gframe_filtered.empty or df_genres_f.empty:
+                st.warning("No genre data available for this filter to analyze 'By Genre'.")
+                return
+                
+            # --- FIX: Get top genres from *filtered* data ---
+            top_genres_list = df_genres_f.nlargest(10, 'popularity')['genres'].tolist()
+            
+            explicit_by_genre = []
+            for genre in top_genres_list:
+                # --- FIX: Search in the *filtered* track list ---
+                genre_data = gframe_filtered[gframe_filtered['genres'] == genre]
+                if len(genre_data) > 0:
+                    # Ensure 'explicit' column exists, default to 0 (Clean) if not
+                    explicit_pct = (genre_data.get('explicit', 0).sum() / len(genre_data)) * 100
+                    explicit_by_genre.append({'genre': genre[:20], 'explicit_percentage': explicit_pct})
+            
+            if not explicit_by_genre:
+                st.info("No explicit content found in the top genres for this filter.")
+                fig_explicit_years = go.Figure().update_layout(title='Explicit Content by Genre (%)')
+            else:
+                explicit_genre_df = pd.DataFrame(explicit_by_genre).sort_values('explicit_percentage')
+                
+                fig_explicit_years = px.bar(
+                    explicit_genre_df,
+                    x='explicit_percentage',
+                    y='genre',
+                    orientation='h',
+                    title='Explicit Content by Genre (%) (Filtered)',
+                    labels={'genre': 'Genre', 'explicit_percentage': 'Explicit Content (%)'},
+                    color='explicit_percentage',
+                    color_continuous_scale='Reds'
+                )
+            
+        else:  # Commercial Impact
+            # --- FIX: Use df_filtered, not df. Make a copy. ---
+            df_impact = df_filtered[df_filtered['year'] >= 1980].copy()
+            
+            if df_impact.empty:
+                st.warning("No data from 1980 onwards to calculate commercial impact.")
+                return
+
+            explicit_impact = df_impact.groupby(['year', 'explicit'])['popularity'].mean().reset_index()
+            explicit_impact['explicit_label'] = explicit_impact['explicit'].map({0: 'Clean', 1: 'Explicit'})
+            
+            fig_explicit_years = px.line(
+                explicit_impact,
+                x='year',
+                y='popularity',
+                color='explicit_label',
+                title='Commercial Performance: Clean vs Explicit Over Time (Filtered)',
+                labels={'year': 'Year', 'popularity': 'Average Popularity', 'explicit_label': 'Content Type'},
+                markers=True
+            )
+        
+        st.plotly_chart(fig_explicit_years, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 14: POPULARITY LIFECYCLE (Corrected: No arguments, fully dynamic)
+    # --------------------------------------------------------
+    def render_pop_lifecycle():
+        st.subheader("14. The Popularity Lifecycle: Understanding Music Relevance")
+        st.info("**🔍 Strategic Questions:** How long do songs stay relevant? Are older songs experiencing a streaming renaissance? What makes a song 'timeless'?")
+        
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+
+        popularity_view = st.radio(
+            "Analysis:",
+            ["Overall Trend", "By Era", "Timeless Features"],
+            horizontal=True,
+            key="popularity_view"
+        )
+        
+        if popularity_view == "Overall Trend":
+            # --- FIX: Get aggregated data inside the function ---
+            try:
+                # Assumes 'aggregate_by_year' and 'df_filtered' are in global scope
+                popularity_trend = aggregate_by_year(df_filtered)
+                popularity_trend = popularity_trend[popularity_trend['year'] >= 1920][['year', 'popularity']]
+            except Exception as e:
+                st.error(f"Error during aggregation: {e}")
+                return
+
+            if popularity_trend.empty:
+                st.warning("No popularity trend data for this filter.")
+                return
+                
+            fig_pop_trend = px.line(
+                popularity_trend,
+                x='year',
+                y='popularity',
+                title='The Streaming Effect: Popularity Trend (Filtered)',
+                labels={'year': 'Year', 'popularity': 'Average Popularity'},
+                markers=True
+            )
+            
+            # Add streaming era marker
+            fig_pop_trend.add_vline(x=2006, line_dash="dash", line_color="green", opacity=0.5)
+            fig_pop_trend.add_annotation(x=2006, y=popularity_trend['popularity'].max()*0.9, 
+                                        text="Spotify Launch", showarrow=True)
+            
+            # Add trend line
+            fig_pop_trend.add_scatter(
+                x=popularity_trend['year'],
+                y=popularity_trend['popularity'].rolling(window=10, center=True).mean(),
+                mode='lines',
+                name='10-Year Moving Average',
+                line=dict(color='red', dash='dash')
+            )
+            
+        elif popularity_view == "By Era":
+            # --- FIX: Use df_filtered.copy() ---
+            df_eras = df_filtered.copy()
+            df_eras['era'] = pd.cut(df_eras['year'], 
+                                    bins=[0, 1960, 1980, 1990, 2000, 2010, 2025],
+                                    labels=['Pre-1960', '1960s-70s', '1980s', '1990s', '2000s', '2010s+'])
+            
+            # Use observed=True to ignore empty bins
+            era_popularity = df_eras.groupby('era', observed=True)['popularity'].agg(['mean', 'std']).reset_index()
+            
+            if era_popularity.empty:
+                st.warning("Not enough data to group by era.")
+                return
+
+            fig_pop_trend = px.bar(
+                era_popularity,
+                x='era',
+                y='mean',
+                error_y='std',
+                title='Popularity by Musical Era (Filtered)',
+                labels={'era': 'Era', 'mean': 'Average Popularity'},
+                color='mean',
+                color_continuous_scale='Blues'
+            )
+            
+        else:  # Timeless Features
+            # --- FIX: Use df_filtered, not df ---
+            timeless_threshold = df_filtered['popularity'].quantile(0.7)
+            df_timeless = df_filtered.copy()
+            df_timeless['is_timeless'] = df_timeless['popularity'] > timeless_threshold
+            
+            features_compare = ['energy', 'danceability', 'valence', 'acousticness']
+            
+            # Use observed=True to handle cases where one group might be empty
+            timeless_features = df_timeless.groupby('is_timeless', observed=True)[features_compare].mean().T
+            
+            # Check if both columns (True/False) exist
+            if True not in timeless_features.columns or False not in timeless_features.columns:
+                st.info("Not enough data to compare 'Timeless' vs 'Regular' songs with current filters.")
+                fig_pop_trend = go.Figure().update_layout(title='The DNA of Timeless Songs (Filtered)')
+            else:
+                timeless_features.columns = ['Regular', 'Timeless']
+                fig_pop_trend = px.bar(
+                    timeless_features,
+                    title='The DNA of Timeless Songs (Filtered)',
+                    labels={'index': 'Feature', 'value': 'Average Value'},
+                    barmode='group'
+                )
+            
+        st.plotly_chart(fig_pop_trend, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 15: ARTIST EVOLUTION (Corrected: No arguments, empty check)
+    # --------------------------------------------------------
+    def render_artist_evo():
+        st.subheader("15. Artist Evolution: The Rise and Fall of Music Icons")
+        st.info("**🔍 Strategic Questions:** Which artists dominated different eras? How has artist longevity changed? Can we identify 'comeback' artists or one-era wonders?")
+
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+
+        # Prepare the data
+        artist_time_analysis = st.radio(
+            "Analysis Type:",
+            ["Top Artists Timeline", "Artist Dominance by Decade", "Longevity Analysis", "Rising Stars"],
+            horizontal=True,
+            key="artist_time_analysis"
+        )
+
+        if artist_time_analysis == "Top Artists Timeline":
+            # Sub-options for timeline view
+            col_art_time1, col_art_time2, col_art_time3 = st.columns(3)
+            
+            with col_art_time1:
+                metric_choice = st.selectbox(
+                    "Metric:",
+                    ["Average Popularity", "Track Count", "Maximum Popularity"],
+                    key="artist_timeline_metric"
+                )
+            
+            with col_art_time2:
+                time_granularity = st.selectbox(
+                    "Time Period:",
+                    ["By Year", "By Decade", "By 5-Year Period"],
+                    key="time_granularity"
+                )
+            
+            with col_art_time3:
+                top_n_artists = st.slider(
+                    "Number of Artists:",
+                    min_value=5, max_value=30, value=15, step=5,
+                    key="top_n_timeline"
+                )
+            
+            # --- This is all correct: uses df_filtered and .copy() ---
+            df_artist_time = df_filtered[df_filtered['year'] >= 1960].copy()
+            
+            if df_artist_time.empty:
+                st.warning("No data from 1960 onwards for this analysis.")
+                return
+
+            # ... (rest of your "Top Artists Timeline" logic is perfect) ...
+            # Determine time column based on granularity
+            if time_granularity == "By Decade":
+                df_artist_time['time_period'] = df_artist_time['decade']
+                time_col = 'time_period'
+            elif time_granularity == "By 5-Year Period":
+                df_artist_time['time_period'] = (df_artist_time['year'] // 5) * 5
+                time_col = 'time_period'
+            else:  # By Year
+                time_col = 'year'
+                df_artist_time['time_period'] = df_artist_time['year']
+            
+            df_artist_time['artist_clean'] = df_artist_time['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
+            df_artist_time['artist_clean'] = df_artist_time['artist_clean'].str.split(',').str[0].str.strip()
+            
+            if metric_choice == "Average Popularity":
+                artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean'])['popularity'].mean().reset_index()
+                metric_col = 'popularity'
+                metric_label = 'Average Popularity'
+            elif metric_choice == "Track Count":
+                artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean']).size().reset_index(name='track_count')
+                metric_col = 'track_count'
+                metric_label = 'Number of Tracks'
+            else:  # Maximum Popularity
+                artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean'])['popularity'].max().reset_index()
+                metric_col = 'popularity'
+                metric_label = 'Maximum Popularity'
+            
+            top_artists_overall = artist_metrics.groupby('artist_clean')[metric_col].mean().nlargest(top_n_artists).index.tolist()
+            artist_metrics_filtered = artist_metrics[artist_metrics['artist_clean'].isin(top_artists_overall)]
+            
+            if artist_metrics_filtered.empty:
+                st.warning("No data found for the top artists in this time period.")
+                return
+
+            fig_artist_timeline = px.line(
+                artist_metrics_filtered,
+                x='time_period', y=metric_col, color='artist_clean',
+                title=f'Top {top_n_artists} Artists: {metric_label} Over Time',
+                labels={'time_period': time_granularity.replace('By ', ''), 
+                        metric_col: metric_label, 'artist_clean': 'Artist'},
+                markers=True, template='plotly_dark'
+            )
+            fig_artist_timeline.update_layout(
+                plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3',
+                hovermode='x unified',
+                legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02),
+                height=600
+            )
+            fig_artist_timeline.update_xaxes(rangeslider_visible=True)
+            st.plotly_chart(fig_artist_timeline, use_container_width=True)
+            
+            # ... (rest of your metric columns logic is also correct) ...
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            with col_stat1:
+                if artist_metrics_filtered.empty:
+                    st.metric("Most Consistent Artist", "N/A", "No data")
+                else:
+                    counts_by_artist = artist_metrics_filtered.groupby('artist_clean').size()
+                    if counts_by_artist.empty:
+                        st.metric("Most Consistent Artist", "N/A", "No data")
+                    else:
+                        most_consistent = counts_by_artist.idxmax()
+                        appearances = int(counts_by_artist.max())
+                        st.metric("Most Consistent Artist", most_consistent[:25], f"{appearances} periods")
+            with col_stat2:
+                if artist_metrics_filtered.empty or artist_metrics_filtered[metric_col].dropna().empty:
+                    st.metric(f"Peak {metric_label}", "N/A", "No data")
+                else:
+                    peak_row = artist_metrics_filtered.loc[artist_metrics_filtered[metric_col].idxmax()]
+                    peak_artist = str(peak_row['artist_clean'])
+                    peak_value = float(peak_row[metric_col])
+                    st.metric(f"Peak {metric_label}", peak_artist[:25], f"{peak_value:.1f}")
+            with col_stat3:
+                if artist_metrics_filtered.empty or artist_metrics_filtered['time_period'].dropna().empty:
+                    st.metric("Current Leader", "N/A", "")
+                else:
+                    recent_period = artist_metrics_filtered['time_period'].max()
+                    recent_df = artist_metrics_filtered[artist_metrics_filtered['time_period'] == recent_period]
+                    if recent_df.empty or recent_df[metric_col].dropna().empty:
+                        st.metric("Current Leader", "N/A", "")
+                    else:
+                        recent_top = recent_df.nlargest(1, metric_col)['artist_clean'].values[0]
+                        st.metric("Current Leader", str(recent_top)[:25], f"In {recent_period}")
+
+        elif artist_time_analysis == "Artist Dominance by Decade":
+            # --- This is all correct: uses 'df' for options, 'df_filtered' for data ---
+            decade_selection = st.select_slider(
+                "Select Decade Range:",
+                options=sorted(df['decade'].unique()),
+                value=(1970, 2020),
+                key="dominance_decade_range"
+            )
+            
+            df_dominance = df_filtered[(df_filtered['decade'] >= decade_selection[0]) & 
+                                    (df_filtered['decade'] <= decade_selection[1])].copy()
+            
+            if df_dominance.empty:
+                st.warning("No data available for the selected decade range.")
+                return
+
+            # ... (rest of your "Artist Dominance" logic is perfect) ...
+            df_dominance['artist_clean'] = df_dominance['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
+            df_dominance['artist_clean'] = df_dominance['artist_clean'].str.split(',').str[0].str.strip()
+            
+            dominance_by_decade = []
+            for decade in range(decade_selection[0], decade_selection[1] + 10, 10):
+                decade_data = df_dominance[df_dominance['decade'] == decade]
+                if len(decade_data) > 0:
+                    artist_stats = decade_data.groupby('artist_clean').agg({
+                        'popularity': ['mean', 'max', 'count']
+                    }).round(2)
+                    artist_stats.columns = ['avg_popularity', 'max_popularity', 'track_count']
+                    artist_stats['dominance_score'] = (
+                        artist_stats['avg_popularity'] * 0.5 + 
+                        artist_stats['max_popularity'] * 0.3 + 
+                        artist_stats['track_count'] * 0.2
+                    )
+                    top_decade_artists = artist_stats.nlargest(10, 'dominance_score')
+                    for artist, row in top_decade_artists.iterrows():
+                        dominance_by_decade.append({
+                            'decade': decade, 'artist': artist[:30],
+                            'dominance_score': row['dominance_score'],
+                            'avg_popularity': row['avg_popularity'],
+                            'track_count': row['track_count']
+                        })
+            
+            dominance_df = pd.DataFrame(dominance_by_decade)
+            
+            if not dominance_df.empty:
+                heatmap_data = dominance_df.pivot_table(
+                    index='artist', columns='decade', values='dominance_score', fill_value=0
+                )
+                heatmap_data['total'] = heatmap_data.sum(axis=1)
+                heatmap_data = heatmap_data.sort_values('total', ascending=False).drop('total', axis=1).head(20)
+                
+                fig_dominance = px.imshow(
+                    heatmap_data,
+                    title='Artist Dominance Heatmap by Decade',
+                    labels=dict(x="Decade", y="Artist", color="Dominance Score"),
+                    aspect="auto", color_continuous_scale="Viridis", template='plotly_dark'
+                )
+                fig_dominance.update_layout(
+                    plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3', height=700
+                )
+                st.plotly_chart(fig_dominance, use_container_width=True)
+                
+                st.markdown("### 👑 Decade Leaders")
+                decade_leaders = dominance_df.sort_values(['decade', 'dominance_score'], ascending=[True, False])
+                decade_leaders = decade_leaders.groupby('decade').first().reset_index()
+                
+                cols = st.columns(len(decade_leaders))
+                for idx, (_, leader) in enumerate(decade_leaders.iterrows()):
+                    with cols[idx]:
+                        st.metric(
+                            f"{int(leader['decade'])}s",
+                            leader['artist'][:20],
+                            f"Score: {leader['dominance_score']:.1f}"
+                        )
+            else:
+                st.info("No data available for the selected decade range.")
+
+        elif artist_time_analysis == "Longevity Analysis":
+            # --- This is all correct: uses df_filtered.copy() ---
+            st.markdown("### 🏆 Artist Career Longevity & Consistency")
+            min_tracks = st.slider(
+                "Minimum tracks to be included:",
+                min_value=5, max_value=50, value=10, step=5,
+                key="longevity_min_tracks"
+            )
+            
+            df_longevity = df_filtered.copy()
+            
+            if df_longevity.empty:
+                st.warning("No data for longevity analysis.")
+                return
+
+            # ... (rest of your "Longevity Analysis" logic is perfect) ...
+            df_longevity['artist_clean'] = df_longevity['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
+            df_longevity['artist_clean'] = df_longevity['artist_clean'].str.split(',').str[0].str.strip()
+            
+            longevity_stats = df_longevity.groupby('artist_clean').agg({
+                'year': ['min', 'max', 'nunique'],
+                'popularity': ['mean', 'std', 'max'],
+                'name': 'count'
+            }).round(2)
+            longevity_stats.columns = ['first_year', 'last_year', 'active_years', 
+                                    'avg_popularity', 'std_popularity', 'max_popularity', 'track_count']
+            longevity_stats = longevity_stats[longevity_stats['track_count'] >= min_tracks]
+            
+            if longevity_stats.empty:
+                st.warning(f"No artists found with at least {min_tracks} tracks in this filter.")
+                return
+
+            longevity_stats['career_span'] = longevity_stats['last_year'] - longevity_stats['first_year']
+            longevity_stats['consistency_score'] = (longevity_stats['avg_popularity'] / 
+                                                (longevity_stats['std_popularity'] + 1)) * (longevity_stats['active_years'] / longevity_stats['career_span'].clip(lower=1))
+            longevity_stats = longevity_stats.reset_index()
+            
+            col_long1, col_long2 = st.columns(2)
+            with col_long1:
+                fig_career_span = px.scatter(
+                    longevity_stats.nlargest(30, 'career_span'),
+                    x='career_span', y='avg_popularity', size='track_count', color='consistency_score',
+                    hover_data=['artist_clean', 'first_year', 'last_year'],
+                    title='Longest Career Spans (Top 30)',
+                    labels={'career_span': 'Career Span (Years)', 'avg_popularity': 'Average Popularity', 'consistency_score': 'Consistency'},
+                    template='plotly_dark', color_continuous_scale='Viridis'
+                )
+                fig_career_span.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
+                st.plotly_chart(fig_career_span, use_container_width=True)
+            
+            with col_long2:
+                fig_consistency = px.bar(
+                    longevity_stats.nlargest(15, 'consistency_score'),
+                    x='consistency_score', y='artist_clean', orientation='h', color='avg_popularity',
+                    title='Most Consistent Artists (Top 15)',
+                    labels={'consistency_score': 'Consistency Score', 'artist_clean': 'Artist', 'avg_popularity': 'Avg Popularity'},
+                    template='plotly_dark', color_continuous_scale='Viridis'
+                )
+                fig_consistency.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3', yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig_consistency, use_container_width=True)
+            
+            st.markdown("### 🎭 Artist Career Types")
+            longevity_stats['career_type'] = 'Standard'
+            longevity_stats.loc[(longevity_stats['career_span'] > 20) & (longevity_stats['avg_popularity'] > 50), 'career_type'] = 'Legend'
+            longevity_stats.loc[(longevity_stats['career_span'] < 5) & (longevity_stats['max_popularity'] > 70), 'career_type'] = 'One-Hit Wonder'
+            longevity_stats.loc[(longevity_stats['career_span'] > 10) & (longevity_stats['consistency_score'] > longevity_stats['consistency_score'].quantile(0.75)), 'career_type'] = 'Steady Performer'
+            
+            career_distribution = longevity_stats['career_type'].value_counts()
+            cols = st.columns(min(4, len(career_distribution)))
+            for idx, (career_type, count) in enumerate(career_distribution.items()):
+                with cols[idx % 4]:
+                    emoji = {'Legend': '👑', 'One-Hit Wonder': '🌟', 'Steady Performer': '📊', 'Standard': '🎵'}.get(career_type, '🎵')
+                    st.metric(f"{emoji} {career_type}", f"{count} artists", f"{(count/len(longevity_stats)*100):.1f}%")
+
+        else:  # Rising Stars
+            # --- This is all correct: uses df_filtered.copy() ---
+            st.markdown("### 🚀 Rising Stars & Trending Artists")
+            window_years = st.slider(
+                "Analysis window (recent years):",
+                min_value=5, max_value=20, value=10, step=5,
+                key="rising_window"
+            )
+            
+            current_year = df_filtered['year'].max()
+            cutoff_year = current_year - window_years
+            
+            df_recent = df_filtered[df_filtered['year'] > cutoff_year].copy()
+            df_previous = df_filtered[(df_filtered['year'] <= cutoff_year) & 
+                                    (df_filtered['year'] > cutoff_year - window_years)].copy()
+            
+            if df_recent.empty:
+                st.warning("No data found in the recent analysis window.")
+                return
+
+            # ... (rest of your "Rising Stars" logic is perfect) ...
+            for data in [df_recent, df_previous]:
+                data['artist_clean'] = data['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
+                data['artist_clean'] = data['artist_clean'].str.split(',').str[0].str.strip()
+            
+            recent_stats = df_recent.groupby('artist_clean').agg({'popularity': 'mean', 'name': 'count'}).rename(columns={'popularity': 'recent_pop', 'name': 'recent_tracks'})
+            previous_stats = df_previous.groupby('artist_clean').agg({'popularity': 'mean', 'name': 'count'}).rename(columns={'popularity': 'previous_pop', 'name': 'previous_tracks'})
+            
+            growth_analysis = pd.merge(recent_stats, previous_stats, left_index=True, right_index=True, how='left').fillna(0)
+            growth_analysis['pop_growth'] = ((growth_analysis['recent_pop'] - growth_analysis['previous_pop']) / (growth_analysis['previous_pop'] + 1)) * 100
+            growth_analysis['track_growth'] = ((growth_analysis['recent_tracks'] - growth_analysis['previous_tracks']) / (growth_analysis['previous_tracks'] + 1)) * 100
+            growth_analysis['momentum_score'] = (growth_analysis['pop_growth'] * 0.6 + growth_analysis['track_growth'] * 0.4)
+            growth_analysis = growth_analysis.reset_index()
+            growth_analysis = growth_analysis[growth_analysis['recent_tracks'] >= 3]
+
+            if growth_analysis.empty:
+                st.warning("No artists with >= 3 recent tracks found for momentum analysis.")
+                return
+
+            col_rise1, col_rise2 = st.columns(2)
+            with col_rise1:
+                rising_stars = growth_analysis.nlargest(15, 'momentum_score')
+                if not rising_stars.empty:
+                    fig_rising = px.scatter(
+                        rising_stars,
+                        x='previous_pop', y='recent_pop', size='recent_tracks', color='momentum_score',
+                        hover_data=['artist_clean'],
+                        title='Rising Stars: Previous vs Current Popularity',
+                        labels={'previous_pop': f'Popularity ({cutoff_year-window_years}-{cutoff_year})',
+                                'recent_pop': f'Popularity ({cutoff_year}-{current_year})',
+                                'momentum_score': 'Momentum'},
+                        template='plotly_dark', color_continuous_scale='RdYlGn'
+                    )
+                    max_val = max(rising_stars['previous_pop'].max(), rising_stars['recent_pop'].max())
+                    fig_rising.add_shape(type='line', x0=0, y0=0, x1=max_val, y1=max_val, line=dict(color='gray', dash='dash', width=1))
+                    fig_rising.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
+                    st.plotly_chart(fig_rising, use_container_width=True)
+                else:
+                    st.info("No rising stars found.")
+
+            with col_rise2:
+                new_artists = growth_analysis[growth_analysis['previous_tracks'] == 0].nlargest(10, 'recent_pop')
+                if not new_artists.empty:
+                    fig_new = px.bar(
+                        new_artists, x='recent_pop', y='artist_clean', orientation='h', color='recent_tracks',
+                        title='Breakthrough Artists (New Entrants)',
+                        labels={'recent_pop': 'Current Popularity', 'artist_clean': 'Artist', 'recent_tracks': 'Track Count'},
+                        template='plotly_dark', color_continuous_scale='Viridis'
+                    )
+                    fig_new.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3', yaxis={'categoryorder':'total ascending'})
+                    st.plotly_chart(fig_new, use_container_width=True)
+                else:
+                    st.info("No breakthrough artists found in the selected time window.")
+            
+            st.markdown("### 📊 Movement Summary")
+            col_sum1, col_sum2, col_sum3 = st.columns(3)
+            with col_sum1:
+                biggest_gainer = growth_analysis.nlargest(1, 'pop_growth')
+                if not biggest_gainer.empty:
+                    st.metric("🎯 Biggest Popularity Gain", biggest_gainer['artist_clean'].values[0][:25], f"+{biggest_gainer['pop_growth'].values[0]:.1f}%")
+            with col_sum2:
+                most_productive = growth_analysis.nlargest(1, 'recent_tracks')
+                if not most_productive.empty:
+                    st.metric("🎵 Most Productive", most_productive['artist_clean'].values[0][:25], f"{most_productive['recent_tracks'].values[0]:.0f} tracks")
+            with col_sum3:
+                highest_momentum = growth_analysis.nlargest(1, 'momentum_score')
+                if not highest_momentum.empty:
+                    st.metric(
+                        "🚀 Highest Momentum",
+                        highest_momentum['artist_clean'].values[0][:25],
+                        f"Score: {highest_momentum['momentum_score'].values[0]:.1f}"
+                    )
+
+    # --------------------------------------------------------
+    # VIZ 16: TITLE ANALYTICS (Corrected: No arguments, safe checks)
+    # --------------------------------------------------------
+    def render_titles():
+        st.subheader("16. The Power of Words: Song Title Analysis")
+        st.info("**🔍 Strategic Questions:** Do shorter titles perform better? What words appear most in hit songs? Can title sentiment predict success?")
+
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+
+        title_analysis_type = st.radio(
+            "Analysis Type:",
+            ["Title Length vs Popularity", "Most Common Words", "Title Patterns"],
+            horizontal=True,
+            key="title_analysis"
+        )
+
+        # --- This .copy() is perfect! ---
+        df_titles = df_filtered.copy()
+        
+        # Check for NaNs in 'name' column, which can break string ops
+        if df_titles['name'].isna().any():
+            df_titles = df_titles.dropna(subset=['name'])
+
+        df_titles['title_length'] = df_titles['name'].str.len()
+        df_titles['title_word_count'] = df_titles['name'].str.split().str.len()
+
+        if title_analysis_type == "Title Length vs Popularity":
+            col_title1, col_title2 = st.columns(2)
+            
+            with col_title1:
+                fig_title_len = px.scatter(
+                    df_titles.sample(min(5000, len(df_titles))),
+                    x='title_length',
+                    y='popularity',
+                    trendline='lowess',
+                    title='Title Length (Characters) vs Popularity',
+                    labels={'title_length': 'Title Length (chars)', 'popularity': 'Popularity'},
+                    opacity=0.6,
+                    template='plotly_dark'
+                )
+                fig_title_len.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
+                st.plotly_chart(fig_title_len, use_container_width=True)
+            
+            with col_title2:
+                # --- FIX: Use np.inf for the last bin ---
+                word_bins = pd.cut(df_titles['title_word_count'], 
+                                bins=[0, 1, 2, 3, 4, np.inf], 
+                                labels=['1 word', '2 words', '3 words', '4 words', '5+ words'])
+                
+                # --- FIX: Add observed=True ---
+                word_popularity = df_titles.groupby(word_bins, observed=True)['popularity'].mean().reset_index()
+                
+                fig_word_count = px.bar(
+                    word_popularity,
+                    x='title_word_count',
+                    y='popularity',
+                    title='Average Popularity by Title Word Count',
+                    labels={'title_word_count': 'Word Count', 'popularity': 'Average Popularity'},
+                    color='popularity',
+                    color_continuous_scale='Viridis',
+                    template='plotly_dark'
+                )
+                fig_word_count.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
+                st.plotly_chart(fig_word_count, use_container_width=True)
+
+        elif title_analysis_type == "Most Common Words":
+            df_popular_titles = df_titles[df_titles['popularity'] > 50]
+            
+            if df_popular_titles.empty:
+                st.warning("No songs with >50 popularity in this filter to analyze common words.")
+                return
+
+            all_words = ' '.join(df_popular_titles['name'].str.lower()).split()
+            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'was', 'are', 'been'}
+            filtered_words = [re.sub(r'\W+', '', word) for word in all_words if word not in stop_words and len(word) > 2]
+            
+            word_freq = Counter(filtered_words)
+            top_words = pd.DataFrame(word_freq.most_common(20), columns=['word', 'count'])
+            
+            if top_words.empty:
+                st.info("No common words found.")
+                return
+
+            fig_words = px.bar(
+                top_words,
+                x='count',
+                y='word',
+                orientation='h',
+                title='Most Common Words in Popular Songs (>50 popularity)',
+                labels={'count': 'Frequency', 'word': 'Word'},
+                color='count',
+                color_continuous_scale='Viridis',
+                template='plotly_dark'
+            )
+            fig_words.update_layout(
+                plot_bgcolor='#181818', paper_bgcolor='#181818',
+                font_color='#B3B3B3', height=600,
+                yaxis={'categoryorder':'total ascending'}
+            )
+            st.plotly_chart(fig_words, use_container_width=True)
+
+        else:  # Title Patterns
+            df_titles['has_feat'] = df_titles['name'].str.contains('feat\.|ft\.|featuring', case=False, na=False)
+            df_titles['has_parentheses'] = df_titles['name'].str.contains('\(|\)', na=False)
+            df_titles['has_numbers'] = df_titles['name'].str.contains('\d', na=False)
+            df_titles['is_uppercase'] = df_titles['name'].str.isupper()
+            
+            patterns = {
+                'Features': df_titles.groupby('has_feat')['popularity'].mean(),
+                'Parentheses': df_titles.groupby('has_parentheses')['popularity'].mean(),
+                'Numbers': df_titles.groupby('has_numbers')['popularity'].mean(),
+                'All Caps': df_titles.groupby('is_uppercase')['popularity'].mean()
+            }
+            
+            pattern_results = []
+            for pattern, data in patterns.items():
+                # This 'if len(data) == 2' check is perfect!
+                if len(data) == 2 and True in data.index and False in data.index:
+                    pattern_results.append({
+                        'Pattern': pattern,
+                        'Without': data[False],
+                        'With': data[True],
+                        'Impact': data[True] - data[False]
+                    })
+            
+            if not pattern_results:
+                st.info("Not enough data to compare title patterns.")
+                return
+
+            pattern_df = pd.DataFrame(pattern_results)
+            
+            fig_patterns = px.bar(
+                pattern_df,
+                x=['Without', 'With'],
+                y='Pattern',
+                title='Impact of Title Patterns on Popularity',
+                labels={'value': 'Average Popularity', 'variable': 'Pattern Type'},
+                barmode='group',
+                template='plotly_dark',
+                color_discrete_sequence=['#B3B3B3', '#1DB954']
+            )
+            fig_patterns.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
+            st.plotly_chart(fig_patterns, use_container_width=True)
+
+    # --------------------------------------------------------
+    # VIZ 17: COLLABORATION PATTERNS (Corrected: No arguments)
+    # --------------------------------------------------------
+    def render_collab():
+        st.subheader("17. Collaboration Economy: The Power of Features")
+        st.info("**🔍 Strategic Questions:** Do collaborations boost popularity? Which artists collaborate most? What's the optimal number of artists per track?")
+
+        # --- FIX: Check for empty data first ---
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
+
+        # --- This .copy() is perfect! ---
+        df_collab = df_filtered.copy()
+        
+        # Check for NaNs in 'artists' column
+        if df_collab['artists'].isna().any():
+            df_collab = df_collab.dropna(subset=['artists'])
+            
+        df_collab['artist_count'] = df_collab['artists'].str.count(',') + 1
+
+        collab_view = st.radio(
+            "View:",
+            ["Collaboration Impact", "Artist Networks", "Optimal Team Size"],
+            horizontal=True,
+            key="collab_view"
+        )
+
+        if collab_view == "Collaboration Impact":
+            df_collab['is_collab'] = df_collab['artist_count'] > 1
+            
+            col_collab1, col_collab2 = st.columns(2)
+            
+            with col_collab1:
+                collab_stats = df_collab.groupby('is_collab', observed=True)['popularity'].agg(['mean', 'std', 'count']).reset_index()
+                collab_stats['is_collab'] = collab_stats['is_collab'].map({False: 'Solo', True: 'Collaboration'})
+                
+                if collab_stats.empty:
+                    st.warning("No data for Solo vs. Collab comparison.")
+                else:
+                    fig_collab_impact = px.bar(
+                        collab_stats,
+                        x='is_collab', y='mean', error_y='std',
+                        title='Solo vs Collaboration Performance',
+                        labels={'is_collab': 'Type', 'mean': 'Average Popularity'},
+                        color='mean', color_continuous_scale='Viridis',
+                        template='plotly_dark'
+                    )
+                    fig_collab_impact.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
+                    st.plotly_chart(fig_collab_impact, use_container_width=True)
+            
+            with col_collab2:
+                collab_trend = df_collab[df_collab['year'] >= 1980].groupby('year')['is_collab'].mean() * 100
+                
+                if collab_trend.empty:
+                    st.warning("No data for Collaboration Trend timeline.")
+                else:
+                    fig_collab_trend = px.line(
+                        x=collab_trend.index, y=collab_trend.values,
+                        title='Collaboration Trend Over Time',
+                        labels={'x': 'Year', 'y': 'Collaboration %'},
+                        markers=True, template='plotly_dark'
+                    )
+                    fig_collab_trend.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
+                    st.plotly_chart(fig_collab_trend, use_container_width=True)
+
+        elif collab_view == "Artist Networks":
+            collab_only = df_collab[df_collab['artist_count'] > 1].copy()
+            
+            if len(collab_only) > 0:
+                artist_collabs = []
+                # Sample for performance
+                for artists_str in collab_only['artists'].head(1000): 
+                    artists_list = [a.strip() for a in artists_str.replace('[','').replace(']','').replace("'",'').split(',')]
+                    for artist in artists_list:
+                        artist_collabs.append(artist)
+                
+                if not artist_collabs:
+                    st.info("No collaboration artists found in the sample.")
+                    return
+
+                collab_counts = Counter(artist_collabs)
+                top_collabs = pd.DataFrame(collab_counts.most_common(15), columns=['artist', 'collaborations'])
+                
+                fig_network = px.bar(
+                    top_collabs,
+                    x='collaborations', y='artist', orientation='h',
+                    title='Most Collaborative Artists',
+                    labels={'collaborations': 'Number of Collaborations', 'artist': 'Artist'},
+                    color='collaborations', color_continuous_scale='Viridis',
+                    template='plotly_dark'
+                )
+                fig_network.update_layout(
+                    plot_bgcolor='#181818', paper_bgcolor='#181818',
+                    font_color='#B3B3B3', height=500,
+                    yaxis={'categoryorder':'total ascending'}
+                )
+                st.plotly_chart(fig_network, use_container_width=True)
+            else:
+                st.info("No collaboration tracks found in the current filter.")
+
+        else:  # Optimal Team Size
+            team_size = df_collab.groupby('artist_count')['popularity'].agg(['mean', 'count']).reset_index()
+            team_size = team_size[team_size['artist_count'] <= 5]  # Focus on reasonable team sizes
+            
+            if team_size.empty:
+                st.warning("No data available for team size analysis.")
+                return
+
+            fig_team = px.scatter(
+                team_size,
+                x='artist_count', y='mean', size='count',
+                title='Optimal Team Size for Hit Songs',
+                labels={'artist_count': 'Number of Artists', 'mean': 'Average Popularity', 'count': 'Sample Size'},
+                template='plotly_dark', color='mean',
+                color_continuous_scale='RdYlGn'
+            )
+            fig_team.update_layout(plot_bgcolor='#181818', paper_bgcolor='#181818', font_color='#B3B3B3')
+            st.plotly_chart(fig_team, use_container_width=True)
+            
+            # --- FIX: Check if team_size has data before finding idxmax ---
+            if not team_size.empty:
+                optimal = team_size.loc[team_size['mean'].idxmax()]
+                st.success(f"**Optimal Team Size:** {int(optimal['artist_count'])} artist(s) with average popularity of {optimal['mean']:.1f}")
 
 if music_data is not None:
+    render_active_dataset_header()
+
     st.sidebar.markdown("---")
     
     df_to_show = df_filtered if 'df_filtered' in locals() else None
@@ -1227,43 +3467,24 @@ if music_data is not None:
     # TAB 1: DASHBOARD
     # --------------------------------------------------------
     if st.session_state.current_tab == "Dashboard":
-        st.header("📊 Music Analytics Dashboard")
-        st.markdown("Explore trends in audio features and understand what makes songs popular.")
-        
-        # ---------------------------------------------------
-        # EXECUTIVE SUMMARY - QUICK INSIGHTS (Always show)
-        # ---------------------------------------------------
-        st.subheader("📈 Dashboard Summary")
-        
-        # Create quick insight cards
-        col_quick1, col_quick2, col_quick3, col_quick4 = st.columns(4)
-        
-        with col_quick1:
-            trending_feature = df_year.iloc[-1][['energy', 'danceability', 'valence']].idxmax()
-            st.info(f"""**🔥 Trending Feature**
-
-{trending_feature.capitalize()} is dominating modern music""")
-        
-        with col_quick2:
-            growth_rate = ((df_year.iloc[-1]['popularity'] - df_year.iloc[-10]['popularity']) / df_year.iloc[-10]['popularity']) * 100
-            st.success(f"""**📊 10-Year Growth**
-
-{growth_rate:.1f}% popularity increase""")
-        
-        with col_quick3:
-            dominant_mode = "Major" if df_filtered['mode'].mean() > 0.5 else "Minor"
-            st.warning(f"""**🎵 Dominant Mode**
-
-{dominant_mode} keys rule the charts""")
-        
-        with col_quick4:
-            avg_duration = df_filtered['duration_ms'].mean() / 60000
-            st.error(f"""**⏱️ Avg Duration**
-
-{avg_duration:.1f} minutes per song""")
+        render_dashboard_summary()
         
         st.divider()
         
+        # --- END OF SUMMARY SECTION ---
+
+        st.header("📊 Music Analytics Dashboard")
+        st.markdown("Explore trends in audio features and understand what makes songs popular.")
+        
+        # --- FIX ---
+        # 1. Call your aggregator on the filtered data
+        #    This makes the year-based cards dynamic
+        df_year_f = aggregate_by_year(df_filtered)
+        
+               
+        st.divider()
+
+        # HOW TO INTERACT
         with st.expander("How to interact", expanded=True):
             st.markdown("""
             - Use the Global Filters in the sidebar to subset the dataset.
@@ -1271,49 +3492,59 @@ if music_data is not None:
             - On mobile, scroll horizontally when needed.
             - This page loads only the selected visualization for speed.
             """)
-
+        
+        # ---------------------------------------------------
+        # NEW: Main Visualization Controller
+        # ---------------------------------------------------
+        
+        # Create the map of all visualizations
+        # NEW: Added "Welcome" page as the first option
         viz_map = {
-            "📈 Evolution of Features": "evo",
-            "📊 Popularity vs Features": "corr",
-            "🎸 Genre DNA": "genre",
-            "🔞 Explicit Strategy": "explicit",
-            "📈 Explicit Over Time": "explicit_time",
-            "🔗 Temporal Trends": "temporal",
-            "👤 Artist Success Patterns": "artists",
-            "🔍 Feature Explorer": "explorer",
-            "🎵 Key & Mode": "keys",
-            "📅 Decade Evolution": "decades",
-            "💰 Genre Economics": "genre_econ",
-            "⏱️ Tempo Zones": "tempo",
-            "🌟 Popularity Lifecycle": "pop_lifecycle",
-            "🚀 Artist Evolution": "artist_evo",
-            "💬 Title Analytics": "titles",
-            "🤝 Collaboration Patterns": "collab",
+            "🏠 Welcome & Table of Contents": render_welcome_page,
+            "📈 Evolution of Features": render_evolution,
+            "📊 Popularity vs Features": render_correlation,
+            "🎸 Genre DNA": render_genre_dna,
+            "🔞 Explicit Strategy": render_explicit,
+            "📈 Explicit Over Time": render_explicit_time,
+            "🔗 Temporal Trends": render_temporal,
+            "👤 Artist Success Patterns": render_artists,
+            "🔍 Feature Explorer": render_explorer,
+            "🎵 Key & Mode": render_keys,
+            "📅 Decade Evolution": render_decades,
+            "💰 Genre Economics": render_genre_econ,
+            "⏱️ Tempo Zones": render_tempo,
+            "🌟 Popularity Lifecycle": render_pop_lifecycle,
+            "🚀 Artist Evolution": render_artist_evo,
+            "💬 Title Analytics": render_titles,
+            "🤝 Collaboration Patterns": render_collab,
         }
 
-        selected_viz = st.selectbox("Choose a visualization", list(viz_map.keys()), key="viz_picker")
+        # The selectbox now drives what is shown
+        selected_viz_name = st.selectbox(
+            "Choose a visualization to load:", 
+            list(viz_map.keys()), 
+            key="viz_picker"
+        )
 
-        if selected_viz == "📈 Evolution of Features":
-            render_evolution(df_filtered)
-        elif selected_viz == "📊 Popularity vs Features":
-            render_correlation(df_filtered)
-            
-            # placeholder for now; we’ll wire this soon
-            st.info("Temporal Trends will be wired next.")
+        # Get the function associated with the selected name
+        render_function = viz_map.get(selected_viz_name)
+
+        # Call the selected function
+        if render_function:
+            render_function() 
         else:
-            st.info("This visualization will be wired next. Try 'Evolution of Features'.")
+            st.error(f"Error: Could not find function for '{selected_viz_name}'.")
 
-            
-        # Performance Mode Toggle
-        col_perf1, col_perf2 = st.columns([1, 4])
-        with col_perf1:
-            performance_mode = st.checkbox("⚡ Performance Mode", value=False, key="perf_mode", 
-                                          help="Load visualizations on-demand for better performance")
-        with col_perf2:
-            if performance_mode:
-                st.info("Performance Mode enabled: Click on tabs to load visualizations")
+        st.divider()
         
-        if performance_mode:
+        # ---------------------------------------------------
+        # PERFORMANCE MODE (Now much cleaner)
+        # ---------------------------------------------------
+        
+        performance_mode = st.checkbox("⚡ Show all visualizations (Performance Mode)", value=False, key="perf_mode", 
+                                        help="Load all visualizations at once in tabs. May be slow.")
+        
+        if performance_mode:            
             st.markdown("""
             <style>
                 /* Visual indicator for scrollable tabs */
@@ -1340,3582 +3571,47 @@ if music_data is not None:
             </style>
             """, unsafe_allow_html=True)
             
-            
             viz_tabs = st.tabs([
                 "📈 Evolution", "📊 Correlations", "🎸 Genres", "🔞 Explicit",
-                "🔗 Features", "⏱️ Temporal", "👤 Artists", "🔍 Explorer",
-                "🎵 Keys", "📅 Decades", "💰 Economics", "🎚️ Tempo",
-                "📈 Explicit Trends", "🌟 Popularity", "🚀 Artist Evolution",
-                "💬 Titles", "🤝 Collaborations"
+                "📈 Explicit OT", "🔗 Temporal", "👤 Artists", "🔍 Explorer",
+                "🎵 Keys", "📅 Decades", "💰 Economics", "⏱️ Tempo",
+                "🌟 Popularity", "🚀 Artist Evo", "💬 Titles", "🤝 Collabs"
+                # Note: You have 17 functions, but 1 is the Welcome Page.
+                # You'll have 16 tabs for graphs. I've shortened some names.
             ])
 
-
-
-            # Show selected content
-        
-            # ---------------------------------------------------
-            # VIZ 1: Audio Features Over Time - ALL FEATURES
-            # ---------------------------------------------------
-            
             with viz_tabs[0]:
-                st.subheader("1. Evolution of ALL Audio Features Over Decades")
-                compare = st.checkbox("Compare two decades", value=False, key="cmp_evo")
-                df_year_f = aggregate_by_year(df_filtered)
-
-                features = ['danceability','energy','valence','acousticness','instrumentalness','speechiness','liveness','loudness']
-                selected = st.multiselect("Select Audio Features:", features, default=features)
-                normalize = st.checkbox("Normalize", value=False)
-
-                base = df_year_f[["year"] + selected].copy()
-                if normalize:
-                    for c in selected:
-                        rng = base[c].max() - base[c].min()
-                        base[c] = 0 if rng == 0 else (base[c] - base[c].min()) / rng
-
-                if compare:
-                    decades = sorted((df_filtered["decade"]).unique().tolist())
-                    d1 = st.selectbox("First decade", decades, index=max(0, len(decades)-2))
-                    d2 = st.selectbox("Second decade", decades, index=max(0, len(decades)-1))
-
-                    # show average lines as markers for the two selected decades
-                    summary = (df_filtered[df_filtered["decade"].isin([d1, d2])]
-                            .assign(group=lambda x: x["decade"].astype(str))
-                            .groupby(["group","year"], as_index=False)[selected].mean())
-                    melted = summary.melt(id_vars=["group","year"], var_name="Feature", value_name="Value")
-                    fig = px.line(melted, x="year", y="Value", color="Feature", line_dash="group",
-                                title="Evolution (comparison by decade)", template="plotly_dark")
-                else:
-                    melted = base.melt(id_vars=["year"], var_name="Feature", value_name="Value")
-                    fig = px.line(melted, x="year", y="Value", color="Feature",
-                                title="Evolution of Audio Features (1920-2020)", template="plotly_dark")
-
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # ---------------------------------------------------
-            # VIZ 2: Popularity vs Audio Features - ENHANCED
-            # ---------------------------------------------------
-                        
+                render_evolution()
             with viz_tabs[1]:
-                st.subheader("2. Correlation Analysis: Popularity vs Audio Features")
-                st.info("**🔍 Key Questions:** Which audio feature best predicts commercial success? Are there threshold values that guarantee popularity? How do feature combinations create hit songs?")
-                
-                col_viz2_1, col_viz2_2, col_viz2_3 = st.columns(3)
-                
-                with col_viz2_1:
-                    selected_feature = st.selectbox(
-                        "Select Audio Feature:",
-                        ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 'speechiness'],
-                        key="feature_selector"
-                    )
-                
-                with col_viz2_2:
-                    viz2_type = st.radio(
-                        "Visualization Type:",
-                        ["Scatter with Trend", "Hexbin Density", "Box Plot by Bins"],
-                        key="viz2_type"
-                    )
-                
-                with col_viz2_3:
-                    add_percentiles = st.checkbox("Show percentile lines", value=False, key="percentiles_viz2")
-                
-                # Sample for better performance
-                df_sample = df_filtered.sample(min(5000, len(df_filtered)), random_state=42)
-                
-                if viz2_type == "Scatter with Trend":
-                    fig_correlation = px.scatter(
-                        df_sample,
-                        x=selected_feature,
-                        y='popularity',
-                        title=f'Popularity vs {selected_feature.capitalize()}',
-                        opacity=0.6,
-                        trendline='ols',
-                        labels={selected_feature: f'{selected_feature.capitalize()} (0-1)', 'popularity': 'Popularity Score'}
-                    )
-                    
-                    if add_percentiles:
-                        # Add percentile lines
-                        p25 = df_sample[selected_feature].quantile(0.25)
-                        p75 = df_sample[selected_feature].quantile(0.75)
-                        fig_correlation.add_vline(x=p25, line_dash="dash", line_color="red", opacity=0.5)
-                        fig_correlation.add_vline(x=p75, line_dash="dash", line_color="green", opacity=0.5)
-                        
-                elif viz2_type == "Hexbin Density":
-                    fig_correlation = px.density_heatmap(
-                        df_sample,
-                        x=selected_feature,
-                        y='popularity',
-                        title=f'Density: Popularity vs {selected_feature.capitalize()}',
-                        labels={selected_feature: f'{selected_feature.capitalize()} (0-1)', 'popularity': 'Popularity Score'},
-                        nbinsx=30,
-                        nbinsy=20
-                    )
-                    
-                else:  # Box Plot by Bins
-                    # Create bins for the feature
-                    df_sample['feature_bin'] = pd.cut(df_sample[selected_feature], bins=5, 
-                                                    labels=['Very Low', 'Low', 'Medium', 'High', 'Very High'])
-                    fig_correlation = px.box(
-                        df_sample,
-                        x='feature_bin',
-                        y='popularity',
-                        title=f'Popularity Distribution by {selected_feature.capitalize()} Levels',
-                        labels={'feature_bin': f'{selected_feature.capitalize()} Level', 'popularity': 'Popularity Score'}
-                    )
-                
-                st.plotly_chart(fig_correlation, use_container_width=True)
-                
-                # Show correlation coefficient
-                correlation = df_filtered[selected_feature].corr(df_filtered['popularity'])
-                st.metric(f"Correlation Coefficient", f"{correlation:.3f}", 
-                        delta=f"{'Positive' if correlation > 0 else 'Negative'} correlation")
-
-            # ---------------------------------------------------
-            # VIZ 3: Genre Analysis - ENHANCED
-            # ---------------------------------------------------
-            
+                render_correlation()
             with viz_tabs[2]:
-                st.subheader("3. Genre DNA: Audio Feature Signatures")
-                st.info("**🔍 Strategic Questions:** What is the unique 'DNA' of each genre? Which genres are converging in style? How can artists differentiate within saturated genres?")
-                
-                col_genre1, col_genre2 = st.columns(2)
-                
-                with col_genre1:
-                    genre_feature = st.selectbox(
-                        "Select Audio Feature:",
-                        ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
-                        'speechiness', 'liveness', 'loudness', 'tempo'],
-                        key="genre_feature_selector"
-                    )
-                
-                with col_genre2:
-                    genre_viz_type = st.radio(
-                        "Visualization:",
-                        ["Box Plot", "Radar Chart"], # <-- ALTERAÇÃO: Removido "Violin Plot"
-                        horizontal=True,
-                        key="genre_viz_type"
-                    )
-                
-                # Get top genres
-                top_genres = df_genres.nlargest(15, 'popularity')
-                
-                if genre_viz_type == "Box Plot":
-                    fig_genre = px.box(
-                        top_genres,
-                        x='genres',
-                        y=genre_feature,
-                        color='genres',
-                        title=f'{genre_feature.capitalize()} Distribution Across Top 15 Genres',
-                        labels={'genres': 'Genre', genre_feature: f'{genre_feature.capitalize()}'}
-                    )
-                    fig_genre.update_layout(showlegend=False, xaxis_tickangle=-45)
-                    
-                # <-- ALTERAÇÃO: O bloco "elif" para Violin Plot foi completamente removido
-                    
-                else:  # Radar Chart (Este "else" agora é ativado quando "Radar Chart" é selecionado)
-                    # Select top 8 genres for radar chart
-                    import plotly.graph_objects as go
-                    
-                    top_8_genres = df_genres.nlargest(8, 'popularity')
-                    features_for_radar = ['energy', 'danceability', 'valence', 'acousticness', 'speechiness']
-                    
-                    fig_genre = go.Figure()
-                    
-                    for _, genre_row in top_8_genres.iterrows():
-                        values = [genre_row[feat] for feat in features_for_radar]
-                        fig_genre.add_trace(go.Scatterpolar(
-                            r=values,
-                            theta=features_for_radar,
-                            fill='toself',
-                            name=genre_row['genres'][:20]
-                        ))
-                    
-                    fig_genre.update_layout(
-                        polar=dict(
-                            radialaxis=dict(
-                                visible=True,
-                                range=[0, 1]
-                            )),
-                        showlegend=True,
-                        title="Genre DNA: Audio Feature Signatures"
-                    )
-                
-                st.plotly_chart(fig_genre, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 4: Explicit Content Strategy Analysis
-            # ---------------------------------------------------
-            
+                render_genre_dna()
             with viz_tabs[3]:
-                st.subheader("4. Explicit Content: Commercial Strategy Analysis")
-                st.info("**🔍 Strategic Questions:** Is explicit content a successful commercial strategy? Which genres benefit most from explicit content? Should artists release both clean and explicit versions?")
-                
-                # Create explicit label
-                df_filtered['explicit_label'] = df_filtered['explicit'].map({0: 'Clean', 1: 'Explicit'})
-                
-                col_exp1, col_exp2 = st.columns(2)
-                
-                with col_exp1:
-                    # Popularity comparison
-                    fig_explicit = px.violin(
-                        df_filtered[df_filtered['popularity'] > 0],
-                        x='explicit_label',
-                        y='popularity',
-                        color='explicit_label',
-                        title='Popularity Distribution: Clean vs Explicit',
-                        labels={'explicit_label': 'Content Type', 'popularity': 'Popularity Score'}
-                    )
-                    st.plotly_chart(fig_explicit, use_container_width=True)
-                
-                with col_exp2:
-                    # Feature comparison
-                    explicit_feature = st.selectbox(
-                        "Compare by feature:",
-                        ['energy', 'danceability', 'valence', 'speechiness'],
-                        key="explicit_feature"
-                    )
-                    
-                    fig_explicit_feat = px.box(
-                        df_filtered,
-                        x='explicit_label',
-                        y=explicit_feature,
-                        color='explicit_label',
-                        title=f'{explicit_feature.capitalize()} by Content Type',
-                        labels={'explicit_label': 'Content Type', explicit_feature: explicit_feature.capitalize()}
-                    )
-                    st.plotly_chart(fig_explicit_feat, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 5: Feature Correlation & Clustering
-            # ---------------------------------------------------
-            
+                render_explicit()
             with viz_tabs[4]:
-                st.subheader("5. Feature Relationships: The Music Formula")
-                st.info("**🔍 Strategic Questions:** Which features must be balanced together? Can we identify 'formula' combinations for different popularity levels? What trade-offs do producers make?")
-                
-                # Toggle between correlation matrix and cluster analysis
-                analysis_type = st.radio(
-                    "Analysis Type:",
-                    ["Correlation Matrix", "Feature Pairs Analysis", "Success Formula"],
-                    horizontal=True,
-                    key="analysis_type_viz5"
-                )
-                
-                audio_features = ['danceability', 'energy', 'valence', 'acousticness', 
-                                'instrumentalness', 'liveness', 'loudness', 'speechiness', 'popularity']
-                
-                if analysis_type == "Correlation Matrix":
-                    correlation_matrix = df_filtered[audio_features].corr()
-                    
-                    fig_heatmap = px.imshow(
-                        correlation_matrix,
-                        title='Correlation Between Audio Features',
-                        text_auto='.2f',
-                        aspect='auto',
-                        color_continuous_scale='RdBu_r'
-                    )
-                    st.plotly_chart(fig_heatmap, use_container_width=True)
-                    
-                elif analysis_type == "Feature Pairs Analysis":
-                    # Show strongest correlations
-                    correlation_matrix = df_filtered[audio_features].corr()
-                    
-                    # Get correlations with popularity
-                    pop_corr = correlation_matrix['popularity'].drop('popularity').sort_values(ascending=False)
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown("**Top Positive Correlations with Popularity:**")
-                        for feat, corr in pop_corr.head(3).items():
-                            st.write(f"• {feat}: {corr:.3f}")
-                    
-                    with col2:
-                        st.markdown("**Top Negative Correlations with Popularity:**")
-                        for feat, corr in pop_corr.tail(3).items():
-                            st.write(f"• {feat}: {corr:.3f}")
-                            
-                else:  # Success Formula
-                    # Segment songs by popularity
-                    df_success = df_filtered.copy()
-                    df_success['success_level'] = pd.cut(df_success['popularity'], 
-                                                        bins=[0, 30, 60, 100],
-                                                        labels=['Low', 'Medium', 'High'])
-                    
-                    # Calculate mean features by success level
-                    success_formula = df_success.groupby('success_level')[audio_features[:-1]].mean()
-                    
-                    fig_formula = px.bar(
-                        success_formula.T,
-                        title="The Success Formula: Average Features by Popularity Level",
-                        labels={'index': 'Audio Feature', 'value': 'Average Value'},
-                        barmode='group'
-                    )
-                    st.plotly_chart(fig_formula, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 6: Temporal Strategy Analysis
-            # ---------------------------------------------------
-            
+                render_explicit_time()
             with viz_tabs[5]:
-                st.subheader("6. Temporal Trends: Predicting the Future of Music")
-                st.info("**🔍 Strategic Questions:** Can we predict the next trend? Are songs converging to a standard formula? What features are becoming obsolete?")
-                
-                col_tempo1, col_tempo2 = st.columns(2)
-                
-                # Convert duration to minutes BEFORE using it
-                df_year_f = aggregate_by_year(df_filtered)
-                df_year_f["duration_min"] = df_year_f["duration_ms"] / 60000.0
-
-                
-                with col_tempo1:
-                    # Add trend prediction toggle
-                    show_prediction = st.checkbox("Show trend projection", value=False, key="prediction_duration")
-                    
-                    fig_duration = px.line(
-                        df_year_f[df_year_f["year"] >= 1960],
-                        x="year", y="duration_min",
-                        title="Song Duration: The Attention Span Crisis",
-                        labels={"duration_min": "Duration (minutes)", "year": "Year"}
-                    )
-                    
-                    if show_prediction:
-                        # Simple linear projection
-                        try:
-                            from scipy import stats
-                            recent_years = df_year_f[df_year_f['year'] >= 2000].copy()
-                            
-                            # Make sure duration_min is calculated for recent_years
-                            if 'duration_min' not in recent_years.columns:
-                                recent_years['duration_min'] = recent_years['duration_ms'] / 60000
-                            
-                            # Check if we have valid data
-                            if len(recent_years) > 0 and not recent_years['duration_min'].isna().all():
-                                slope, intercept, _, _, _ = stats.linregress(recent_years['year'], recent_years['duration_min'])
-                                future_years = list(range(2020, 2031))
-                                future_duration = [slope * year + intercept for year in future_years]
-                                fig_duration.add_scatter(x=future_years, y=future_duration, mode='lines', 
-                                                        name='Projection', line=dict(dash='dash', color='red'))
-                        except:
-                            pass  # If scipy is not available or calculation fails, just skip projection
-                    
-                    st.plotly_chart(fig_duration, use_container_width=True)
-                
-                with col_tempo2:
-                                
-                    fig_tempo = px.line(
-                        df_year_f[df_year_f['year'] >= 1960],
-                        x='year',
-                        y='tempo',
-                        title='Tempo Evolution: The BPM Arms Race',
-                        labels={'tempo': 'Tempo (BPM)', 'year': 'Year'}
-                    )
-                    st.plotly_chart(fig_tempo, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 7: Artist Success Patterns
-            # ---------------------------------------------------
-            
+                render_temporal()
             with viz_tabs[6]:
-                st.subheader("7. Artist Success Patterns: One-Hit Wonder vs Consistency")
-                st.info("**🔍 Strategic Questions:** What separates consistent hitmakers from one-hit wonders? Is it better to release many average songs or few excellent ones? How do successful artists maintain their sound signature?")
-                
-                # Enhanced artist analysis
-                artist_strategy = st.radio(
-                    "Analysis Focus:",
-                    ["Top 50 Artists Overview", "Consistency Analysis", "Feature Signature (Top 5)"],
-                    horizontal=True,
-                    key="artist_strategy"
-                )
-                
-                top_artists = df_artist.nlargest(50, 'popularity')
-                
-                if artist_strategy == "Top 50 Artists Overview":
-                    fig_artists = px.scatter(
-                        top_artists,
-                        x='count',
-                        y='popularity',
-                        size='energy',
-                        color='valence',
-                        hover_data=['artists'],
-                        title='Artist Strategy: Volume vs Quality',
-                        labels={'count': 'Number of Tracks', 'popularity': 'Average Popularity', 'valence': 'Valence'}
-                    )
-                    
-                    # Add quadrant lines
-                    median_count = top_artists['count'].median()
-                    median_pop = top_artists['popularity'].median()
-                    fig_artists.add_hline(y=median_pop, line_dash="dash", line_color="gray", opacity=0.5)
-                    fig_artists.add_vline(x=median_count, line_dash="dash", line_color="gray", opacity=0.5)
-                    
-                    # Add quadrant labels
-                    fig_artists.add_annotation(x=median_count*0.3, y=median_pop*1.2, text="Quality over Quantity", 
-                                            showarrow=False, font=dict(color="green"))
-                    fig_artists.add_annotation(x=median_count*1.7, y=median_pop*1.2, text="Consistent Hitmakers", 
-                                            showarrow=False, font=dict(color="#89ccff"))
-                    
-                elif artist_strategy == "Consistency Analysis":
-                    # Calculate coefficient of variation (std/mean) for each artist
-                    artist_consistency = []
-                    
-                    for artist in top_artists['artists'].head(50):
-                        artist_songs = df[df['artists'].str.contains(artist, na=False, case=True)]['popularity']
-                        # --- FIM DA CORREÇÃO ---
-                        
-                        if len(artist_songs) > 1:
-                            cv = artist_songs.std() / artist_songs.mean() if artist_songs.mean() > 0 else 0
-                            artist_consistency.append({'artist': artist[:20], 'consistency': 1 - cv, 
-                                                    'avg_popularity': artist_songs.mean()})
-                    
-                    consistency_df = pd.DataFrame(artist_consistency)
-                    
-                    # A verificação 'if empty' ainda é útil, caso alguns artistas 
-                    # ainda não sejam encontrados.
-                    if consistency_df.empty:
-                        st.info("Não foi possível calcular a consistência dos artistas. (Nenhuma correspondência de artista com >1 música encontrada nos dados brutos).")
-                        import plotly.graph_objects as go
-                        fig_artists = go.Figure()
-                        fig_artists.update_layout(title='Artist Consistency Score (No data to display)')
-                    else:
-                        # O DataFrame é válido, então podemos criar o gráfico
-                        fig_artists = px.bar(
-                            consistency_df.sort_values('consistency', ascending=True),
-                            x='consistency',
-                            y='artist',
-                            orientation='h',
-                            color='avg_popularity',
-                            title='Artist Consistency Score (Higher = More Consistent)',
-                            labels={'consistency': 'Consistency Score', 'artist': 'Artist', 
-                                    'avg_popularity': 'Avg Popularity'}
-                        )
-                                
-                else:  # Feature Signature
-                    # Compare top 5 artists' average features
-                    import plotly.graph_objects as go
-                    
-                    top_5_artists = top_artists.head(5)
-                    features_for_signature = ['energy', 'danceability', 'valence', 'acousticness', 'speechiness']
-                    
-                    fig_artists = go.Figure()
-                    
-                    for _, artist_row in top_5_artists.iterrows():
-                        values = [artist_row[feat] for feat in features_for_signature]
-                        fig_artists.add_trace(go.Scatterpolar(
-                            r=values,
-                            theta=features_for_signature,
-                            fill='toself',
-                            name=artist_row['artists'][:20]
-                        ))
-                    
-                    fig_artists.update_layout(
-                        polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-                        showlegend=True,
-                        title="Artist Sound Signatures: What Makes Them Unique"
-                    )
-                
-                st.plotly_chart(fig_artists, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 8: Interactive Feature Explorer - ENHANCED
-            # ---------------------------------------------------
-
+                render_artists()
             with viz_tabs[7]:
-                st.subheader("8. Feature Interaction Explorer: Finding the Sweet Spot")
-                st.info("**🔍 Strategic Questions:** What feature combinations create viral hits? Are there 'dead zones' to avoid? How do different eras prefer different feature combinations?")
-                
-                col_exp1, col_exp2, col_exp3 = st.columns(3)
-                
-                with col_exp1:
-                    feature_x = st.selectbox(
-                        "X-axis Feature:",
-                        ['danceability', 'energy', 'valence', 'acousticness', 'instrumentalness', 
-                        'speechiness', 'liveness', 'loudness', 'tempo', 'popularity'],
-                        index=0,
-                        key="density_x_feature"
-                    )
-                
-                with col_exp2:
-                    feature_y = st.selectbox(
-                        "Y-axis Feature:",
-                        ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
-                        'speechiness', 'liveness', 'loudness', 'tempo', 'popularity'],
-                        index=0,
-                        key="density_y_feature"
-                    )
-                
-                with col_exp3:
-                    viz_style = st.radio(
-                        "Style:",
-                        ["Density Heatmap", "Scatter with Size", "Contour Plot"],
-                        key="viz_style_8"
-                    )
-                
-                # Add decade filter for this specific viz
-                decade_filter_8 = st.select_slider(
-                    "Filter by Decade Range:",
-                    options=sorted(df[df['decade'] >= 1950]['decade'].unique()),
-                    value=(1990, 2020),
-                    key="decade_filter_8"
-                )
-                
-                # Filter data
-                df_density = df_filtered[(df_filtered['decade'] >= decade_filter_8[0]) & 
-                                        (df_filtered['decade'] <= decade_filter_8[1])]
-                df_density_sample = df_density.sample(min(10000, len(df_density)), random_state=42)
-                
-                if viz_style == "Density Heatmap":
-                    fig_density = px.density_heatmap(
-                        df_density_sample,
-                        x=feature_x,
-                        y=feature_y,
-                        title=f'Feature Sweet Spots: {feature_x.capitalize()} vs {feature_y.capitalize()}',
-                        labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()},
-                        nbinsx=30,
-                        nbinsy=30,
-                        color_continuous_scale='Viridis'
-                    )
-                    
-                elif viz_style == "Scatter with Size":
-                    fig_density = px.scatter(
-                        df_density_sample.sample(min(2000, len(df_density_sample))),
-                        x=feature_x,
-                        y=feature_y,
-                        size='popularity',
-                        color='decade',
-                        title=f'Feature Combinations: Size = Popularity',
-                        labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()},
-                        opacity=0.6
-                    )
-                    
-                else:  # Contour Plot
-                    fig_density = px.density_contour(
-                        df_density_sample,
-                        x=feature_x,
-                        y=feature_y,
-                        title=f'Density Contours: {feature_x.capitalize()} vs {feature_y.capitalize()}',
-                        labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()}
-                    )
-                    fig_density.update_traces(contours_coloring="fill", contours_showlabels=True)
-                
-                st.plotly_chart(fig_density, use_container_width=True)
-                
-                # Show insights
-                high_pop_threshold = df_density['popularity'].quantile(0.75)
-                sweet_spot_df = df_density[(df_density['popularity'] > high_pop_threshold)]
-                
-                if len(sweet_spot_df) > 0:
-                    col_insight1, col_insight2 = st.columns(2)
-                    with col_insight1:
-                        st.metric(f"Sweet Spot {feature_x.capitalize()}", 
-                                f"{sweet_spot_df[feature_x].mean():.2f}",
-                                f"±{sweet_spot_df[feature_x].std():.2f}")
-                    with col_insight2:
-                        st.metric(f"Sweet Spot {feature_y.capitalize()}", 
-                                f"{sweet_spot_df[feature_y].mean():.2f}",
-                                f"±{sweet_spot_df[feature_y].std():.2f}")
-
-            # ---------------------------------------------------
-            # VIZ 9: Musical Key Strategy
-            # ---------------------------------------------------
-            
+                render_explorer()
             with viz_tabs[8]:
-                st.subheader("9. Musical Key & Mode: The Emotional Blueprint")
-                st.info("**🔍 Strategic Questions:** Do certain keys resonate better with audiences? Should artists favor major (happy) or minor (sad) keys? Is there a 'golden key' for hits?")
-                
-                # Map keys to musical notation
-                key_mapping = {0: 'C', 1: 'C#', 2: 'D', 3: 'D#', 4: 'E', 5: 'F',
-                            6: 'F#', 7: 'G', 8: 'G#', 9: 'A', 10: 'A#', 11: 'B'}
-                
-                df_filtered['key_name'] = df_filtered['key'].map(key_mapping)
-                df_filtered['mode_name'] = df_filtered['mode'].map({0: 'Minor', 1: 'Major'})
-                
-                key_analysis = st.radio(
-                    "Analysis Type:",
-                    ["Distribution", "Popularity by Key", "Emotional Impact"],
-                    horizontal=True,
-                    key="key_analysis"
-                )
-                
-                if key_analysis == "Distribution":
-                    # Count combinations
-                    key_mode_counts = df_filtered.groupby(['key_name', 'mode_name']).size().reset_index(name='count')
-                    
-                    fig_keys = px.bar(
-                        key_mode_counts,
-                        x='key_name',
-                        y='count',
-                        color='mode_name',
-                        title='Distribution of Musical Keys (Major vs Minor)',
-                        labels={'key_name': 'Musical Key', 'count': 'Number of Songs', 'mode_name': 'Mode'},
-                        category_orders={'key_name': ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']}
-                    )
-                    
-                elif key_analysis == "Popularity by Key":
-                    # Average popularity by key
-                    key_popularity = df_filtered.groupby(['key_name', 'mode_name'])['popularity'].mean().reset_index()
-                    
-                    fig_keys = px.bar(
-                        key_popularity,
-                        x='key_name',
-                        y='popularity',
-                        color='mode_name',
-                        title='Average Popularity by Musical Key',
-                        labels={'key_name': 'Musical Key', 'popularity': 'Average Popularity', 'mode_name': 'Mode'},
-                        category_orders={'key_name': ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']},
-                        barmode='group'
-                    )
-                    
-                else:  # Emotional Impact
-                    # Compare valence (happiness) between major and minor
-                    fig_keys = px.box(
-                        df_filtered,
-                        x='mode_name',
-                        y='valence',
-                        color='mode_name',
-                        title='Emotional Impact: Valence in Major vs Minor Keys',
-                        labels={'mode_name': 'Mode', 'valence': 'Valence (Happiness)'}
-                    )
-                
-                st.plotly_chart(fig_keys, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 10: Decade Evolution Deep Dive
-            # ---------------------------------------------------
-
+                render_keys()
             with viz_tabs[9]:
-                st.subheader("10. Decade Evolution: The Sound of Generations")
-                st.info("**🔍 Strategic Questions:** How homogeneous is modern music? Which decades had the most experimental music? Can we identify the 'signature sound' of each generation?")
-                
-                col_decade1, col_decade2 = st.columns(2)
-                
-                with col_decade1:
-                    decade_feature = st.selectbox(
-                        "Select Feature:",
-                        ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
-                        'speechiness', 'liveness', 'loudness'],
-                        key="decade_feature_selector"
-                    )
-                
-                with col_decade2:
-                    show_variance = st.checkbox("Show variance analysis", value=False, key="variance_decade")
-                
-                # Filter for relevant decades
-                df_decades = df_filtered[df_filtered['decade'] >= 1950].copy()
-                
-                if not show_variance:
-                    fig_decade_box = px.box(
-                        df_decades,
-                        x='decade',
-                        y=decade_feature,
-                        color='decade',
-                        title=f'{decade_feature.capitalize()} Evolution by Decade',
-                        labels={'decade': 'Decade', decade_feature: f'{decade_feature.capitalize()}'}
-                    )
-                    fig_decade_box.update_layout(showlegend=False)
-                    
-                else:
-                    # Calculate variance by decade
-                    variance_by_decade = df_decades.groupby('decade')[decade_feature].agg(['mean', 'std']).reset_index()
-                    variance_by_decade['cv'] = variance_by_decade['std'] / variance_by_decade['mean']
-                    
-                    fig_decade_box = px.line(
-                        variance_by_decade,
-                        x='decade',
-                        y='cv',
-                        title=f'Musical Diversity: {decade_feature.capitalize()} Variance Over Time',
-                        labels={'decade': 'Decade', 'cv': 'Coefficient of Variation'},
-                        markers=True
-                    )
-                    fig_decade_box.add_hline(y=variance_by_decade['cv'].mean(), 
-                                            line_dash="dash", line_color="red", opacity=0.5)
-                
-                st.plotly_chart(fig_decade_box, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 11: Genre Popularity & Market Share
-            # ---------------------------------------------------
-
+                render_decades()
             with viz_tabs[10]:
-                st.subheader("11. Genre Economics: Market Share & Commercial Viability")
-                st.info("**🔍 Strategic Questions:** Which genres dominate the market? Are niche genres more loyal? Where should new artists position themselves for maximum impact?")
-                
-                genre_view = st.radio(
-                    "View:",
-                    ["Top Genres by Popularity", "Genre Market Share", "Genre Loyalty Index"],
-                    horizontal=True,
-                    key="genre_view"
-                )
-                
-                if genre_view == "Top Genres by Popularity":
-                    # Get top 20 genres by popularity
-                    gframe = align_genre_frame(music_data["with_genres"], filters)
-                    df_genres_f = aggregate_by_genre(gframe)
-
-                    top_genres_pop = df_genres_f.nlargest(20, "popularity")[["genres","popularity"]]
-                    
-                    fig_top_genres = px.bar(
-                        top_genres_pop,
-                        x='popularity',
-                        y='genres',
-                        orientation='h',
-                        color='popularity',
-                        color_continuous_scale='Viridis',
-                        title='Genre Power Rankings: Commercial Appeal',
-                        labels={'genres': 'Genre', 'popularity': 'Average Popularity'}
-                    )
-                    fig_top_genres.update_layout(height=600, yaxis={'categoryorder':'total ascending'})
-                    
-                elif genre_view == "Genre Market Share":
-                    # Calculate market share (number of tracks)
-                    genre_counts = music_data['with_genres']['genres'].value_counts().head(15)
-                    
-                    fig_top_genres = px.pie(
-                        values=genre_counts.values,
-                        names=genre_counts.index,
-                        title='Genre Market Share by Track Volume'
-                    )
-                    
-                else:  # Genre Loyalty Index
-                    # Calculate consistency (inverse of std deviation)
-                    genre_loyalty = []
-                    for genre in df_genres.nlargest(15, 'popularity')['genres']:
-                        genre_data = music_data['with_genres'][music_data['with_genres']['genres'] == genre]
-                        if len(genre_data) > 10:
-                            loyalty = 1 / (genre_data['popularity'].std() + 1)  # +1 to avoid division by zero
-                            genre_loyalty.append({'genre': genre[:20], 'loyalty_index': loyalty * 100,
-                                                'avg_popularity': genre_data['popularity'].mean()})
-                    
-                    loyalty_df = pd.DataFrame(genre_loyalty).sort_values('loyalty_index', ascending=True)
-                    
-                    fig_top_genres = px.scatter(
-                        loyalty_df,
-                        x='avg_popularity',
-                        y='loyalty_index',
-                        text='genre',
-                        title='Genre Loyalty vs Popularity: Finding Your Niche',
-                        labels={'loyalty_index': 'Loyalty Index', 'avg_popularity': 'Average Popularity'}
-                    )
-                    fig_top_genres.update_traces(textposition='top center')
-                
-                st.plotly_chart(fig_top_genres, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 12: Tempo-Popularity Sweet Spots
-            # ---------------------------------------------------
-
+                render_genre_econ()
             with viz_tabs[11]:
-                st.subheader("12. The Tempo Formula: BPM Success Zones")
-                st.info("**🔍 Strategic Questions:** Is there an optimal BPM for chart success? Do different decades prefer different tempos? Should producers target specific BPM ranges?")
-                
-                # Add BPM zones
-                df_tempo = df_filtered.copy()
-                df_tempo['bpm_zone'] = pd.cut(df_tempo['tempo'], 
-                                            bins=[0, 80, 100, 120, 140, 200],
-                                            labels=['Slow (<80)', 'Moderate (80-100)', 
-                                                    'Dance (100-120)', 'Fast (120-140)', 'Very Fast (>140)'])
-                
-                tempo_analysis = st.radio(
-                    "Analysis:",
-                    ["Density Map", "Success Zones", "Evolution"],
-                    horizontal=True,
-                    key="tempo_analysis"
-                )
-                
-                if tempo_analysis == "Density Map":
-                    # Sample data for better performance
-                    df_tempo_sample = df_tempo.sample(min(10000, len(df_tempo)))
-                    
-                    fig_tempo_density = px.density_heatmap(
-                        df_tempo_sample,
-                        x='tempo',
-                        y='popularity',
-                        title='Tempo-Popularity Heat Map: Where Success Lives',
-                        labels={'tempo': 'Tempo (BPM)', 'popularity': 'Popularity Score'},
-                        nbinsx=40,
-                        nbinsy=30
-                    )
-                    
-                elif tempo_analysis == "Success Zones":
-                    # Average popularity by BPM zone
-                    bpm_success = df_tempo.groupby('bpm_zone')['popularity'].agg(['mean', 'std', 'count']).reset_index()
-                    
-                    fig_tempo_density = px.bar(
-                        bpm_success,
-                        x='bpm_zone',
-                        y='mean',
-                        error_y='std',
-                        title='Popularity by BPM Zone',
-                        labels={'bpm_zone': 'BPM Zone', 'mean': 'Average Popularity'},
-                        color='mean',
-                        color_continuous_scale='RdYlGn'
-                    )
-                    
-                else:  # Evolution
-                    # BPM zones over decades
-                    tempo_evolution = df_tempo.groupby(['decade', 'bpm_zone']).size().reset_index(name='count')
-                    tempo_evolution = tempo_evolution[tempo_evolution['decade'] >= 1960]
-                    
-                    fig_tempo_density = px.bar(
-                        tempo_evolution,
-                        x='decade',
-                        y='count',
-                        color='bpm_zone',
-                        title='Evolution of Tempo Preferences Over Decades',
-                        labels={'decade': 'Decade', 'count': 'Number of Tracks'},
-                        barnorm='percent'
-                    )
-                
-                st.plotly_chart(fig_tempo_density, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 13: Explicit Content Strategy Over Time
-            # ---------------------------------------------------
-
+                render_tempo()
             with viz_tabs[12]:
-                st.subheader("13. Explicit Content Evolution: Cultural Shifts & Commercial Impact")
-                st.info("**🔍 Strategic Questions:** When did explicit content become mainstream? Which genres pioneered explicit content? Is the trend reversing or accelerating?")
-                
-                explicit_view = st.radio(
-                    "View:",
-                    ["Timeline", "By Genre", "Commercial Impact"],
-                    horizontal=True,
-                    key="explicit_view"
-                )
-                
-                if explicit_view == "Timeline":
-                    # Group by year and explicit
-                    explicit_years = (df_filtered[df_filtered["year"] >= 1960]
-                                    .groupby(["year","explicit"])
-                                    .size().reset_index(name="count"))
-                    explicit_years["explicit_label"] = explicit_years["explicit"].map({0:"Clean",1:"Explicit"})
-                    
-                    fig_explicit_years = px.area(
-                        explicit_years,
-                        x='year',
-                        y='count',
-                        color='explicit_label',
-                        title='The Rise of Explicit Content (1960-2020)',
-                        labels={'year': 'Year', 'count': 'Number of Tracks', 'explicit_label': 'Content Type'},
-                        color_discrete_map={'Clean': '#2E7D32', 'Explicit': '#D32F2F'}
-                    )
-                    
-                elif explicit_view == "By Genre":
-                    # Explicit percentage by genre
-                    genre_explicit = music_data['with_genres'].copy()
-                    genre_explicit['explicit'] = genre_explicit.get('explicit', 0)
-                    
-                    top_genres_list = df_genres.nlargest(10, 'popularity')['genres'].tolist()
-                    
-                    explicit_by_genre = []
-                    for genre in top_genres_list:
-                        genre_data = genre_explicit[genre_explicit['genres'] == genre]
-                        if len(genre_data) > 0:
-                            explicit_pct = (genre_data['explicit'].sum() / len(genre_data)) * 100
-                            explicit_by_genre.append({'genre': genre[:20], 'explicit_percentage': explicit_pct})
-                    
-                    explicit_genre_df = pd.DataFrame(explicit_by_genre).sort_values('explicit_percentage')
-                    
-                    fig_explicit_years = px.bar(
-                        explicit_genre_df,
-                        x='explicit_percentage',
-                        y='genre',
-                        orientation='h',
-                        title='Explicit Content by Genre (%)',
-                        labels={'genre': 'Genre', 'explicit_percentage': 'Explicit Content (%)'},
-                        color='explicit_percentage',
-                        color_continuous_scale='Reds'
-                    )
-                    
-                else:  # Commercial Impact
-                    # Compare popularity over time
-                    explicit_impact = df[df['year'] >= 1980].groupby(['year', 'explicit'])['popularity'].mean().reset_index()
-                    explicit_impact['explicit_label'] = explicit_impact['explicit'].map({0: 'Clean', 1: 'Explicit'})
-                    
-                    fig_explicit_years = px.line(
-                        explicit_impact,
-                        x='year',
-                        y='popularity',
-                        color='explicit_label',
-                        title='Commercial Performance: Clean vs Explicit Over Time',
-                        labels={'year': 'Year', 'popularity': 'Average Popularity', 'explicit_label': 'Content Type'},
-                        markers=True
-                    )
-                
-                st.plotly_chart(fig_explicit_years, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 14: Popularity Lifecycle & Trends
-            # ---------------------------------------------------
-
+                render_pop_lifecycle()
             with viz_tabs[13]:
-                st.subheader("14. The Popularity Lifecycle: Understanding Music Relevance")
-                st.info("**🔍 Strategic Questions:** How long do songs stay relevant? Are older songs experiencing a streaming renaissance? What makes a song 'timeless'?")
-                
-                popularity_view = st.radio(
-                    "Analysis:",
-                    ["Overall Trend", "By Era", "Timeless Features"],
-                    horizontal=True,
-                    key="popularity_view"
-                )
-                
-                # Filter for recent years with enough data
-                popularity_trend = df_year_f[df_year_f['year'] >= 1920][['year', 'popularity']]
-                
-                if popularity_view == "Overall Trend":
-                    fig_pop_trend = px.line(
-                        popularity_trend,
-                        x='year',
-                        y='popularity',
-                        title='The Streaming Effect: How Digital Platforms Changed Music Popularity',
-                        labels={'year': 'Year', 'popularity': 'Average Popularity'},
-                        markers=True
-                    )
-                    
-                    # Add streaming era marker
-                    fig_pop_trend.add_vline(x=2006, line_dash="dash", line_color="green", opacity=0.5)
-                    fig_pop_trend.add_annotation(x=2006, y=popularity_trend['popularity'].max()*0.9, 
-                                                text="Spotify Launch", showarrow=True)
-                    
-                    # Add trend line
-                    fig_pop_trend.add_scatter(
-                        x=popularity_trend['year'],
-                        y=popularity_trend['popularity'].rolling(window=10, center=True).mean(),
-                        mode='lines',
-                        name='10-Year Moving Average',
-                        line=dict(color='red', dash='dash')
-                    )
-                    
-                elif popularity_view == "By Era":
-                    # Define music eras
-                    df_eras = df.copy()
-                    df_eras['era'] = pd.cut(df_eras['year'], 
-                                            bins=[0, 1960, 1980, 1990, 2000, 2010, 2025],
-                                            labels=['Pre-1960', '1960s-70s', '1980s', '1990s', '2000s', '2010s+'])
-                    
-                    era_popularity = df_eras.groupby('era')['popularity'].agg(['mean', 'std']).reset_index()
-                    
-                    fig_pop_trend = px.bar(
-                        era_popularity,
-                        x='era',
-                        y='mean',
-                        error_y='std',
-                        title='Popularity by Musical Era',
-                        labels={'era': 'Era', 'mean': 'Average Popularity'},
-                        color='mean',
-                        color_continuous_scale='Blues'
-                    )
-                    
-                else:  # Timeless Features
-                    # Compare features of consistently popular songs vs others
-                    timeless_threshold = df['popularity'].quantile(0.7)
-                    df_timeless = df.copy()
-                    df_timeless['is_timeless'] = df_timeless['popularity'] > timeless_threshold
-                    
-                    features_compare = ['energy', 'danceability', 'valence', 'acousticness']
-                    timeless_features = df_timeless.groupby('is_timeless')[features_compare].mean().T
-                    timeless_features.columns = ['Regular', 'Timeless']
-                    
-                    fig_pop_trend = px.bar(
-                        timeless_features,
-                        title='The DNA of Timeless Songs',
-                        labels={'index': 'Feature', 'value': 'Average Value'},
-                        barmode='group'
-                    )
-                
-                st.plotly_chart(fig_pop_trend, use_container_width=True)
-            
-
-            # ---------------------------------------------------
-            # VIZ 15: ARTIST EVOLUTION OVER TIME
-            # ---------------------------------------------------
-
+                render_artist_evo()
             with viz_tabs[14]:
-                st.subheader("15. Artist Evolution: The Rise and Fall of Music Icons")
-                st.info("**🔍 Strategic Questions:** Which artists dominated different eras? How has artist longevity changed? Can we identify 'comeback' artists or one-era wonders?")
-
-                # Prepare the data
-                artist_time_analysis = st.radio(
-                    "Analysis Type:",
-                    ["Top Artists Timeline", "Artist Dominance by Decade", "Longevity Analysis", "Rising Stars"],
-                    horizontal=True,
-                    key="artist_time_analysis"
-                )
-
-                if artist_time_analysis == "Top Artists Timeline":
-                    # Sub-options for timeline view
-                    col_art_time1, col_art_time2, col_art_time3 = st.columns(3)
-                    
-                    with col_art_time1:
-                        metric_choice = st.selectbox(
-                            "Metric:",
-                            ["Average Popularity", "Track Count", "Maximum Popularity"],
-                            key="artist_timeline_metric"
-                        )
-                    
-                    with col_art_time2:
-                        time_granularity = st.selectbox(
-                            "Time Period:",
-                            ["By Year", "By Decade", "By 5-Year Period"],
-                            key="time_granularity"
-                        )
-                    
-                    with col_art_time3:
-                        top_n_artists = st.slider(
-                            "Number of Artists:",
-                            min_value=5,
-                            max_value=30,
-                            value=15,
-                            step=5,
-                            key="top_n_timeline"
-                        )
-                    
-                    # Filter data for reasonable time period
-                    df_artist_time = df_filtered[df_filtered['year'] >= 1960].copy()
-                    
-                    # Determine time column based on granularity
-                    if time_granularity == "By Decade":
-                        df_artist_time['time_period'] = df_artist_time['decade']
-                        time_col = 'time_period'
-                    elif time_granularity == "By 5-Year Period":
-                        df_artist_time['time_period'] = (df_artist_time['year'] // 5) * 5
-                        time_col = 'time_period'
-                    else:  # By Year
-                        time_col = 'year'
-                        df_artist_time['time_period'] = df_artist_time['year']
-                    
-                    # Clean artist names (remove brackets and quotes)
-                    df_artist_time['artist_clean'] = df_artist_time['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
-                    
-                    # Split artists if multiple (take first artist only for simplicity)
-                    df_artist_time['artist_clean'] = df_artist_time['artist_clean'].str.split(',').str[0].str.strip()
-                    
-                    # Calculate metrics based on choice
-                    if metric_choice == "Average Popularity":
-                        artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean'])['popularity'].mean().reset_index()
-                        metric_col = 'popularity'
-                        metric_label = 'Average Popularity'
-                    elif metric_choice == "Track Count":
-                        artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean']).size().reset_index(name='track_count')
-                        metric_col = 'track_count'
-                        metric_label = 'Number of Tracks'
-                    else:  # Maximum Popularity
-                        artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean'])['popularity'].max().reset_index()
-                        metric_col = 'popularity'
-                        metric_label = 'Maximum Popularity'
-                    
-                    # Get top artists overall (across all time periods)
-                    top_artists_overall = artist_metrics.groupby('artist_clean')[metric_col].mean().nlargest(top_n_artists).index.tolist()
-                    
-                    # Filter for top artists
-                    artist_metrics_filtered = artist_metrics[artist_metrics['artist_clean'].isin(top_artists_overall)]
-                    
-                    # Create line chart
-                    fig_artist_timeline = px.line(
-                        artist_metrics_filtered,
-                        x='time_period',
-                        y=metric_col,
-                        color='artist_clean',
-                        title=f'Top {top_n_artists} Artists: {metric_label} Over Time',
-                        labels={'time_period': time_granularity.replace('By ', ''), 
-                                metric_col: metric_label, 
-                                'artist_clean': 'Artist'},
-                        markers=True,
-                        template='plotly_dark'
-                    )
-                    
-                    # Update layout for better visibility
-                    fig_artist_timeline.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3',
-                        hovermode='x unified',
-                        legend=dict(
-                            orientation="v",
-                            yanchor="middle",
-                            y=0.5,
-                            xanchor="left",
-                            x=1.02
-                        ),
-                        height=600
-                    )
-                    
-                    # Add range slider for better navigation
-                    fig_artist_timeline.update_xaxes(rangeslider_visible=True)
-                    
-                    st.plotly_chart(fig_artist_timeline, use_container_width=True)
-                    
-                    # Show summary statistics
-                    col_stat1, col_stat2, col_stat3 = st.columns(3)
-                    # Most Consistent Artist
-                    with col_stat1:
-                        if artist_metrics_filtered.empty:
-                            st.metric("Most Consistent Artist", "N/A", "No data")
-                        else:
-                            counts_by_artist = artist_metrics_filtered.groupby('artist_clean').size()
-                            if counts_by_artist.empty:
-                                st.metric("Most Consistent Artist", "N/A", "No data")
-                            else:
-                                most_consistent = counts_by_artist.idxmax()
-                                appearances = int(counts_by_artist.max())
-                                st.metric("Most Consistent Artist", most_consistent[:25], f"{appearances} periods")
-
-                    # Peak metric (handle empty and NaNs)
-                    with col_stat2:
-                        if artist_metrics_filtered.empty or artist_metrics_filtered[metric_col].dropna().empty:
-                            st.metric(f"Peak {metric_label}", "N/A", "No data")
-                        else:
-                            peak_row = artist_metrics_filtered.loc[artist_metrics_filtered[metric_col].idxmax()]
-                            peak_artist = str(peak_row['artist_clean'])
-                            peak_value = float(peak_row[metric_col])
-                            st.metric(f"Peak {metric_label}", peak_artist[:25], f"{peak_value:.1f}")
-
-                    # Current Leader
-                    with col_stat3:
-                        if artist_metrics_filtered.empty or artist_metrics_filtered['time_period'].dropna().empty:
-                            st.metric("Current Leader", "N/A", "")
-                        else:
-                            recent_period = artist_metrics_filtered['time_period'].max()
-                            recent_df = artist_metrics_filtered[artist_metrics_filtered['time_period'] == recent_period]
-                            if recent_df.empty or recent_df[metric_col].dropna().empty:
-                                st.metric("Current Leader", "N/A", "")
-                            else:
-                                recent_top = recent_df.nlargest(1, metric_col)['artist_clean'].values[0]
-                                st.metric("Current Leader", str(recent_top)[:25], f"In {recent_period}")
-
-                elif artist_time_analysis == "Artist Dominance by Decade":
-                    # Analyze which artists dominated each decade
-                    decade_selection = st.select_slider(
-                        "Select Decade Range:",
-                        options=sorted(df[df['decade'] >= 1950]['decade'].unique()),
-                        value=(1970, 2020),
-                        key="dominance_decade_range"
-                    )
-                    
-                    # Filter data
-                    df_dominance = df_filtered[(df_filtered['decade'] >= decade_selection[0]) & 
-                                            (df_filtered['decade'] <= decade_selection[1])].copy()
-                    
-                    # Clean artist names
-                    df_dominance['artist_clean'] = df_dominance['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
-                    df_dominance['artist_clean'] = df_dominance['artist_clean'].str.split(',').str[0].str.strip()
-                    
-                    # Calculate dominance score (combination of track count and average popularity)
-                    dominance_by_decade = []
-                    
-                    for decade in range(decade_selection[0], decade_selection[1] + 10, 10):
-                        decade_data = df_dominance[df_dominance['decade'] == decade]
-                        if len(decade_data) > 0:
-                            # Get top 10 artists for this decade
-                            artist_stats = decade_data.groupby('artist_clean').agg({
-                                'popularity': ['mean', 'max', 'count']
-                            }).round(2)
-                            artist_stats.columns = ['avg_popularity', 'max_popularity', 'track_count']
-                            
-                            # Calculate dominance score
-                            artist_stats['dominance_score'] = (
-                                artist_stats['avg_popularity'] * 0.5 + 
-                                artist_stats['max_popularity'] * 0.3 + 
-                                artist_stats['track_count'] * 0.2
-                            )
-                            
-                            # Get top 10 for this decade
-                            top_decade_artists = artist_stats.nlargest(10, 'dominance_score')
-                            
-                            for artist, row in top_decade_artists.iterrows():
-                                dominance_by_decade.append({
-                                    'decade': decade,
-                                    'artist': artist[:30],
-                                    'dominance_score': row['dominance_score'],
-                                    'avg_popularity': row['avg_popularity'],
-                                    'track_count': row['track_count']
-                                })
-                    
-                    dominance_df = pd.DataFrame(dominance_by_decade)
-                    
-                    # Create heatmap
-                    if not dominance_df.empty:
-                        # Pivot for heatmap
-                        heatmap_data = dominance_df.pivot_table(
-                            index='artist',
-                            columns='decade',
-                            values='dominance_score',
-                            fill_value=0
-                        )
-                        
-                        # Sort by total dominance
-                        heatmap_data['total'] = heatmap_data.sum(axis=1)
-                        heatmap_data = heatmap_data.sort_values('total', ascending=False).drop('total', axis=1).head(20)
-                        
-                        fig_dominance = px.imshow(
-                            heatmap_data,
-                            title='Artist Dominance Heatmap by Decade',
-                            labels=dict(x="Decade", y="Artist", color="Dominance Score"),
-                            aspect="auto",
-                            color_continuous_scale="Viridis",
-                            template='plotly_dark'
-                        )
-                        
-                        fig_dominance.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3',
-                            height=700
-                        )
-                        
-                        st.plotly_chart(fig_dominance, use_container_width=True)
-                        
-                        # Show decade leaders
-                        st.markdown("### 👑 Decade Leaders")
-                        decade_leaders = dominance_df.sort_values(['decade', 'dominance_score'], ascending=[True, False])
-                        decade_leaders = decade_leaders.groupby('decade').first().reset_index()
-                        
-                        cols = st.columns(len(decade_leaders))
-                        for idx, (_, leader) in enumerate(decade_leaders.iterrows()):
-                            with cols[idx]:
-                                st.metric(
-                                    f"{int(leader['decade'])}s",
-                                    leader['artist'][:20],
-                                    f"Score: {leader['dominance_score']:.1f}"
-                                )
-                    else:
-                        st.info("No data available for the selected decade range.")
-
-                elif artist_time_analysis == "Longevity Analysis":
-                    # Analyze artist career spans and consistency
-                    st.markdown("### 🏆 Artist Career Longevity & Consistency")
-                    
-                    # Minimum tracks threshold
-                    min_tracks = st.slider(
-                        "Minimum tracks to be included:",
-                        min_value=5,
-                        max_value=50,
-                        value=10,
-                        step=5,
-                        key="longevity_min_tracks"
-                    )
-                    
-                    # Clean artist names
-                    df_longevity = df_filtered.copy()
-                    df_longevity['artist_clean'] = df_longevity['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
-                    df_longevity['artist_clean'] = df_longevity['artist_clean'].str.split(',').str[0].str.strip()
-                    
-                    # Calculate longevity metrics
-                    longevity_stats = df_longevity.groupby('artist_clean').agg({
-                        'year': ['min', 'max', 'nunique'],
-                        'popularity': ['mean', 'std', 'max'],
-                        'name': 'count'  # track count
-                    }).round(2)
-                    
-                    longevity_stats.columns = ['first_year', 'last_year', 'active_years', 
-                                            'avg_popularity', 'std_popularity', 'max_popularity', 'track_count']
-                    
-                    # Filter by minimum tracks
-                    longevity_stats = longevity_stats[longevity_stats['track_count'] >= min_tracks]
-                    
-                    # Calculate career span and consistency score
-                    longevity_stats['career_span'] = longevity_stats['last_year'] - longevity_stats['first_year']
-                    longevity_stats['consistency_score'] = (longevity_stats['avg_popularity'] / 
-                                                        (longevity_stats['std_popularity'] + 1)) * (longevity_stats['active_years'] / longevity_stats['career_span'].clip(lower=1))
-                    
-                    # Reset index to get artist names as column
-                    longevity_stats = longevity_stats.reset_index()
-                    
-                    # Get top artists by different metrics
-                    col_long1, col_long2 = st.columns(2)
-                    
-                    with col_long1:
-                        # Longest careers
-                        fig_career_span = px.scatter(
-                            longevity_stats.nlargest(30, 'career_span'),
-                            x='career_span',
-                            y='avg_popularity',
-                            size='track_count',
-                            color='consistency_score',
-                            hover_data=['artist_clean', 'first_year', 'last_year'],
-                            title='Longest Career Spans (Top 30)',
-                            labels={'career_span': 'Career Span (Years)', 
-                                'avg_popularity': 'Average Popularity',
-                                'consistency_score': 'Consistency'},
-                            template='plotly_dark',
-                            color_continuous_scale='Viridis'
-                        )
-                        
-                        fig_career_span.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3'
-                        )
-                        
-                        st.plotly_chart(fig_career_span, use_container_width=True)
-                    
-                    with col_long2:
-                        # Most consistent artists
-                        fig_consistency = px.bar(
-                            longevity_stats.nlargest(15, 'consistency_score'),
-                            x='consistency_score',
-                            y='artist_clean',
-                            orientation='h',
-                            color='avg_popularity',
-                            title='Most Consistent Artists (Top 15)',
-                            labels={'consistency_score': 'Consistency Score', 
-                                'artist_clean': 'Artist',
-                                'avg_popularity': 'Avg Popularity'},
-                            template='plotly_dark',
-                            color_continuous_scale='Viridis'
-                        )
-                        
-                        fig_consistency.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3',
-                            yaxis={'categoryorder':'total ascending'}
-                        )
-                        
-                        st.plotly_chart(fig_consistency, use_container_width=True)
-                    
-                    # Career type classification
-                    st.markdown("### 🎭 Artist Career Types")
-                    
-                    # Classify artists
-                    longevity_stats['career_type'] = 'Standard'
-                    longevity_stats.loc[(longevity_stats['career_span'] > 20) & 
-                                    (longevity_stats['avg_popularity'] > 50), 'career_type'] = 'Legend'
-                    longevity_stats.loc[(longevity_stats['career_span'] < 5) & 
-                                    (longevity_stats['max_popularity'] > 70), 'career_type'] = 'One-Hit Wonder'
-                    longevity_stats.loc[(longevity_stats['career_span'] > 10) & 
-                                    (longevity_stats['consistency_score'] > longevity_stats['consistency_score'].quantile(0.75)), 
-                                    'career_type'] = 'Steady Performer'
-                    
-                    # Show distribution
-                    career_distribution = longevity_stats['career_type'].value_counts()
-                    
-                    col_type1, col_type2, col_type3, col_type4 = st.columns(4)
-                    
-                    for idx, (career_type, count) in enumerate(career_distribution.items()):
-                        col = [col_type1, col_type2, col_type3, col_type4][idx % 4]
-                        with col:
-                            emoji = {'Legend': '👑', 'One-Hit Wonder': '🌟', 
-                                    'Steady Performer': '📊', 'Standard': '🎵'}.get(career_type, '🎵')
-                            st.metric(f"{emoji} {career_type}", f"{count} artists", 
-                                    f"{(count/len(longevity_stats)*100):.1f}%")
-
-                else:  # Rising Stars
-                    # Identify artists with rapid growth
-                    st.markdown("### 🚀 Rising Stars & Trending Artists")
-                    
-                    # Time window for analysis
-                    window_years = st.slider(
-                        "Analysis window (recent years):",
-                        min_value=5,
-                        max_value=20,
-                        value=10,
-                        step=5,
-                        key="rising_window"
-                    )
-                    
-                    current_year = df_filtered['year'].max()
-                    cutoff_year = current_year - window_years
-                    
-                    # Split data into periods
-                    df_recent = df_filtered[df_filtered['year'] > cutoff_year].copy()
-                    df_previous = df_filtered[(df_filtered['year'] <= cutoff_year) & 
-                                            (df_filtered['year'] > cutoff_year - window_years)].copy()
-                    
-                    # Clean artist names
-                    for data in [df_recent, df_previous]:
-                        data['artist_clean'] = data['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
-                        data['artist_clean'] = data['artist_clean'].str.split(',').str[0].str.strip()
-                    
-                    # Calculate metrics for both periods
-                    recent_stats = df_recent.groupby('artist_clean').agg({
-                        'popularity': 'mean',
-                        'name': 'count'
-                    }).rename(columns={'popularity': 'recent_pop', 'name': 'recent_tracks'})
-                    
-                    previous_stats = df_previous.groupby('artist_clean').agg({
-                        'popularity': 'mean',
-                        'name': 'count'
-                    }).rename(columns={'popularity': 'previous_pop', 'name': 'previous_tracks'})
-                    
-                    # Merge and calculate growth
-                    growth_analysis = pd.merge(recent_stats, previous_stats, 
-                                            left_index=True, right_index=True, how='left')
-                    growth_analysis = growth_analysis.fillna(0)
-                    
-                    # Calculate growth metrics
-                    growth_analysis['pop_growth'] = ((growth_analysis['recent_pop'] - growth_analysis['previous_pop']) / 
-                                                    (growth_analysis['previous_pop'] + 1)) * 100
-                    growth_analysis['track_growth'] = ((growth_analysis['recent_tracks'] - growth_analysis['previous_tracks']) / 
-                                                    (growth_analysis['previous_tracks'] + 1)) * 100
-                    growth_analysis['momentum_score'] = (growth_analysis['pop_growth'] * 0.6 + 
-                                                        growth_analysis['track_growth'] * 0.4)
-                    
-                    # Reset index to get artist names
-                    growth_analysis = growth_analysis.reset_index()
-                    
-                    # Filter for meaningful results (at least 3 recent tracks)
-                    growth_analysis = growth_analysis[growth_analysis['recent_tracks'] >= 3]
-                    
-                    # Categories
-                    col_rise1, col_rise2 = st.columns(2)
-                    
-                    with col_rise1:
-                        # Fastest rising
-                        rising_stars = growth_analysis.nlargest(15, 'momentum_score')
-                        
-                        fig_rising = px.scatter(
-                            rising_stars,
-                            x='previous_pop',
-                            y='recent_pop',
-                            size='recent_tracks',
-                            color='momentum_score',
-                            hover_data=['artist_clean'],
-                            title='Rising Stars: Previous vs Current Popularity',
-                            labels={'previous_pop': f'Popularity ({cutoff_year-window_years}-{cutoff_year})',
-                                'recent_pop': f'Popularity ({cutoff_year}-{current_year})',
-                                'momentum_score': 'Momentum'},
-                            template='plotly_dark',
-                            color_continuous_scale='RdYlGn'
-                        )
-                        
-                        # Add diagonal line (no change)
-                        max_val = max(rising_stars['previous_pop'].max(), rising_stars['recent_pop'].max())
-                        fig_rising.add_shape(
-                            type='line',
-                            x0=0, y0=0, x1=max_val, y1=max_val,
-                            line=dict(color='gray', dash='dash', width=1)
-                        )
-                        
-                        fig_rising.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3'
-                        )
-                        
-                        st.plotly_chart(fig_rising, use_container_width=True)
-                    
-                    with col_rise2:
-                        # New entrants (artists with no previous tracks)
-                        new_artists = growth_analysis[growth_analysis['previous_tracks'] == 0].nlargest(10, 'recent_pop')
-                        
-                        if not new_artists.empty:
-                            fig_new = px.bar(
-                                new_artists,
-                                x='recent_pop',
-                                y='artist_clean',
-                                orientation='h',
-                                color='recent_tracks',
-                                title='Breakthrough Artists (New Entrants)',
-                                labels={'recent_pop': 'Current Popularity',
-                                    'artist_clean': 'Artist',
-                                    'recent_tracks': 'Track Count'},
-                                template='plotly_dark',
-                                color_continuous_scale='Viridis'
-                            )
-                            
-                            fig_new.update_layout(
-                                plot_bgcolor='#181818',
-                                paper_bgcolor='#181818',
-                                font_color='#B3B3B3',
-                                yaxis={'categoryorder':'total ascending'}
-                            )
-                            
-                            st.plotly_chart(fig_new, use_container_width=True)
-                        else:
-                            st.info("No breakthrough artists found in the selected time window.")
-                    
-                        # Top movers summary
-                        st.markdown("### 📊 Movement Summary")
-                        
-                        col_sum1, col_sum2, col_sum3 = st.columns(3)
-                        
-                        with col_sum1:
-                            biggest_gainer = growth_analysis.nlargest(1, 'pop_growth')
-                            if not biggest_gainer.empty:
-                                st.metric(
-                                    "🎯 Biggest Popularity Gain",
-                                    biggest_gainer['artist_clean'].values[0][:25],
-                                    f"+{biggest_gainer['pop_growth'].values[0]:.1f}%"
-                                )
-                        
-                        with col_sum2:
-                            most_productive = growth_analysis.nlargest(1, 'recent_tracks')
-                            if not most_productive.empty:
-                                st.metric(
-                                    "🎵 Most Productive",
-                                    most_productive['artist_clean'].values[0][:25],
-                                    f"{most_productive['recent_tracks'].values[0]:.0f} tracks"
-                                )
-                        
-                        with col_sum3:
-                            highest_momentum = growth_analysis.nlargest(1, 'momentum_score')
-                            if not highest_momentum.empty:
-                                st.metric(
-                                    "🚀 Highest Momentum",
-                                    highest_momentum['artist_clean'].values[0][:25],
-                                    f"Score: {highest_momentum['momentum_score'].values[0]:.1f}"
-                            )
-                                
-
-            # ---------------------------------------------------
-            # VIZ 16: SONG TITLE ANALYTICS
-            # ---------------------------------------------------
-
+                render_titles()
             with viz_tabs[15]:
-                st.subheader("16. The Power of Words: Song Title Analysis")
-                st.info("**🔍 Strategic Questions:** Do shorter titles perform better? What words appear most in hit songs? Can title sentiment predict success?")
-
-                import re
-                from collections import Counter
-
-                title_analysis_type = st.radio(
-                    "Analysis Type:",
-                    ["Title Length vs Popularity", "Most Common Words", "Title Patterns"],
-                    horizontal=True,
-                    key="title_analysis"
-                )
-
-                # Add title length column
-                df_titles = df_filtered.copy()
-                df_titles['title_length'] = df_titles['name'].str.len()
-                df_titles['title_word_count'] = df_titles['name'].str.split().str.len()
-
-                if title_analysis_type == "Title Length vs Popularity":
-                    col_title1, col_title2 = st.columns(2)
-                    
-                    with col_title1:
-                        # Character length analysis
-                        fig_title_len = px.scatter(
-                            df_titles.sample(min(5000, len(df_titles))),
-                            x='title_length',
-                            y='popularity',
-                            trendline='lowess',
-                            title='Title Length (Characters) vs Popularity',
-                            labels={'title_length': 'Title Length (chars)', 'popularity': 'Popularity'},
-                            opacity=0.6,
-                            template='plotly_dark'
-                        )
-                        fig_title_len.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3'
-                        )
-                        st.plotly_chart(fig_title_len, use_container_width=True)
-                    
-                    with col_title2:
-                        # Word count analysis
-                        word_bins = pd.cut(df_titles['title_word_count'], 
-                                        bins=[0, 1, 2, 3, 4, 10], 
-                                        labels=['1 word', '2 words', '3 words', '4 words', '5+ words'])
-                        word_popularity = df_titles.groupby(word_bins)['popularity'].mean().reset_index()
-                        
-                        fig_word_count = px.bar(
-                            word_popularity,
-                            x='title_word_count',
-                            y='popularity',
-                            title='Average Popularity by Title Word Count',
-                            labels={'title_word_count': 'Word Count', 'popularity': 'Average Popularity'},
-                            color='popularity',
-                            color_continuous_scale='Viridis',
-                            template='plotly_dark'
-                        )
-                        fig_word_count.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3'
-                        )
-                        st.plotly_chart(fig_word_count, use_container_width=True)
-
-                elif title_analysis_type == "Most Common Words":
-                    # Extract and count words from titles
-                    all_words = ' '.join(df_titles[df_titles['popularity'] > 50]['name'].str.lower()).split()
-                    # Remove common stop words
-                    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'was', 'are', 'been'}
-                    filtered_words = [word for word in all_words if word not in stop_words and len(word) > 2]
-                    
-                    word_freq = Counter(filtered_words)
-                    top_words = pd.DataFrame(word_freq.most_common(20), columns=['word', 'count'])
-                    
-                    fig_words = px.bar(
-                        top_words,
-                        x='count',
-                        y='word',
-                        orientation='h',
-                        title='Most Common Words in Popular Songs (>50 popularity)',
-                        labels={'count': 'Frequency', 'word': 'Word'},
-                        color='count',
-                        color_continuous_scale='Viridis',
-                        template='plotly_dark'
-                    )
-                    fig_words.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3',
-                        height=600,
-                        yaxis={'categoryorder':'total ascending'}
-                    )
-                    st.plotly_chart(fig_words, use_container_width=True)
-
-                else:  # Title Patterns
-                    # Check for patterns
-                    df_titles['has_feat'] = df_titles['name'].str.contains('feat\.|ft\.|featuring', case=False, na=False)
-                    df_titles['has_parentheses'] = df_titles['name'].str.contains('\(|\)', na=False)
-                    df_titles['has_numbers'] = df_titles['name'].str.contains('\d', na=False)
-                    df_titles['is_uppercase'] = df_titles['name'].str.isupper()
-                    
-                    patterns = {
-                        'Features': df_titles.groupby('has_feat')['popularity'].mean(),
-                        'Parentheses': df_titles.groupby('has_parentheses')['popularity'].mean(),
-                        'Numbers': df_titles.groupby('has_numbers')['popularity'].mean(),
-                        'All Caps': df_titles.groupby('is_uppercase')['popularity'].mean()
-                    }
-                    
-                    pattern_results = []
-                    for pattern, data in patterns.items():
-                        if len(data) == 2:
-                            pattern_results.append({
-                                'Pattern': pattern,
-                                'Without': data[False],
-                                'With': data[True],
-                                'Impact': data[True] - data[False]
-                            })
-                    
-                    pattern_df = pd.DataFrame(pattern_results)
-                    
-                    fig_patterns = px.bar(
-                        pattern_df,
-                        x=['Without', 'With'],
-                        y='Pattern',
-                        title='Impact of Title Patterns on Popularity',
-                        labels={'value': 'Average Popularity', 'variable': 'Pattern Type'},
-                        barmode='group',
-                        template='plotly_dark',
-                        color_discrete_sequence=['#B3B3B3', '#1DB954']
-                    )
-                    fig_patterns.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3'
-                    )
-                    st.plotly_chart(fig_patterns, use_container_width=True)
-                
-            # ---------------------------------------------------
-            # VIZ 17: COLLABORATION PATTERNS
-            # ---------------------------------------------------
-            
-            with viz_tabs[16]:
-                st.subheader("17. Collaboration Economy: The Power of Features")
-                st.info("**🔍 Strategic Questions:** Do collaborations boost popularity? Which artists collaborate most? What's the optimal number of artists per track?")
-
-                # Analyze collaboration patterns
-                df_collab = df_filtered.copy()
-                df_collab['artist_count'] = df_collab['artists'].str.count(',') + 1
-
-                collab_view = st.radio(
-                    "View:",
-                    ["Collaboration Impact", "Artist Networks", "Optimal Team Size"],
-                    horizontal=True,
-                    key="collab_view"
-                )
-
-                if collab_view == "Collaboration Impact":
-                    # Solo vs Collaborations
-                    df_collab['is_collab'] = df_collab['artist_count'] > 1
-                    
-                    col_collab1, col_collab2 = st.columns(2)
-                    
-                    with col_collab1:
-                        collab_stats = df_collab.groupby('is_collab')['popularity'].agg(['mean', 'std', 'count']).reset_index()
-                        collab_stats['is_collab'] = collab_stats['is_collab'].map({False: 'Solo', True: 'Collaboration'})
-                        
-                        fig_collab_impact = px.bar(
-                            collab_stats,
-                            x='is_collab',
-                            y='mean',
-                            error_y='std',
-                            title='Solo vs Collaboration Performance',
-                            labels={'is_collab': 'Type', 'mean': 'Average Popularity'},
-                            color='mean',
-                            color_continuous_scale='Viridis',
-                            template='plotly_dark'
-                        )
-                        fig_collab_impact.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3'
-                        )
-                        st.plotly_chart(fig_collab_impact, use_container_width=True)
-                    
-                    with col_collab2:
-                        # Trend over time
-                        collab_trend = df_collab[df_collab['year'] >= 1980].groupby('year')['is_collab'].mean() * 100
-                        
-                        fig_collab_trend = px.line(
-                            x=collab_trend.index,
-                            y=collab_trend.values,
-                            title='Collaboration Trend Over Time',
-                            labels={'x': 'Year', 'y': 'Collaboration %'},
-                            markers=True,
-                            template='plotly_dark'
-                        )
-                        fig_collab_trend.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3'
-                        )
-                        st.plotly_chart(fig_collab_trend, use_container_width=True)
-
-                elif collab_view == "Artist Networks":
-                    # Most collaborative artists
-                    collab_only = df_collab[df_collab['artist_count'] > 1].copy()
-                    
-                    if len(collab_only) > 0:
-                        # Count collaborations per artist (simplified)
-                        artist_collabs = []
-                        for artists_str in collab_only['artists'].head(1000):  # Sample for performance
-                            artists_list = [a.strip() for a in artists_str.replace('[','').replace(']','').replace("'",'').split(',')]
-                            for artist in artists_list:
-                                artist_collabs.append(artist)
-                        
-                        collab_counts = Counter(artist_collabs)
-                        top_collabs = pd.DataFrame(collab_counts.most_common(15), columns=['artist', 'collaborations'])
-                        
-                        fig_network = px.bar(
-                            top_collabs,
-                            x='collaborations',
-                            y='artist',
-                            orientation='h',
-                            title='Most Collaborative Artists',
-                            labels={'collaborations': 'Number of Collaborations', 'artist': 'Artist'},
-                            color='collaborations',
-                            color_continuous_scale='Viridis',
-                            template='plotly_dark'
-                        )
-                        fig_network.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3',
-                            height=500,
-                            yaxis={'categoryorder':'total ascending'}
-                        )
-                        st.plotly_chart(fig_network, use_container_width=True)
-
-                else:  # Optimal Team Size
-                    # Popularity by number of artists
-                    team_size = df_collab.groupby('artist_count')['popularity'].agg(['mean', 'count']).reset_index()
-                    team_size = team_size[team_size['artist_count'] <= 5]  # Focus on reasonable team sizes
-                    
-                    fig_team = px.scatter(
-                        team_size,
-                        x='artist_count',
-                        y='mean',
-                        size='count',
-                        title='Optimal Team Size for Hit Songs',
-                        labels={'artist_count': 'Number of Artists', 'mean': 'Average Popularity', 'count': 'Sample Size'},
-                        template='plotly_dark',
-                        color='mean',
-                        color_continuous_scale='RdYlGn'
-                    )
-                    fig_team.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3'
-                    )
-                    st.plotly_chart(fig_team, use_container_width=True)
-                    
-                    # Show optimal
-                    optimal = team_size.loc[team_size['mean'].idxmax()]
-                    st.success(f"**Optimal Team Size:** {int(optimal['artist_count'])} artist(s) with average popularity of {optimal['mean']:.1f}")
-            
-
-        else:
-            st.stop()       
-            # Normal mode - load all visualizations sequentially
-            # ---------------------------------------------------
-            # VIZ 1: Audio Features Over Time - ALL FEATURES
-            # ---------------------------------------------------
-            
-            st.subheader("1. Evolution of ALL Audio Features Over Decades")
-            st.info("**🔍 Key Question:** How have ALL musical characteristics evolved? Which features show the most dramatic changes, indicating major shifts in music production and consumer preferences?")
-            
-            # Select which features to display
-            all_audio_features = ['danceability', 'energy', 'valence', 'acousticness', 
-                                'instrumentalness', 'speechiness', 'liveness', 'loudness']
-            
-            selected_features_viz1 = st.multiselect(
-                "Select Audio Features to Display:",
-                options=all_audio_features,
-                default=all_audio_features,
-                key="features_selector_viz1"
-            )
-            
-            # Toggle for normalized view
-            normalize_features = st.checkbox("Normalize features for better comparison", value=False, key="normalize_viz1")
-            
-            # Prepare data for time series
-            features_cols = ['year'] + selected_features_viz1
-
-            df_year_f = aggregate_by_year(df_filtered)
-            features_over_time = df_year_f[["year"] + selected_features_viz1].copy()
-
-            if normalize_features:
-                for feat in selected_features_viz1:
-                    features_over_time[feat] = (features_over_time[feat] - features_over_time[feat].min()) / \
-                                            (features_over_time[feat].max() - features_over_time[feat].min())
-            
-            features_melted = features_over_time.melt(
-                id_vars=['year'],
-                var_name='Feature',
-                value_name='Value'
-            )
-            
-            fig_evolution = px.line(
-                features_melted,
-                x='year',
-                y='Value',
-                color='Feature',
-                title='Evolution of Audio Features (1920-2020)',
-                labels={'Value': 'Feature Value' + (' (Normalized)' if normalize_features else ' (0-1)'), 
-                    'year': 'Year'},
-                template='plotly_dark'
-            )
-            
-            # Update layout for Spotify theme
-            fig_evolution.update_layout(
-                plot_bgcolor='#181818',
-                paper_bgcolor='#181818',
-                font_color='#B3B3B3'
-            )
-            
-            # Add annotations for major music eras
-            music_eras = [
-                (1955, "Rock'n'Roll Era"),
-                (1975, "Disco Era"),
-                (1985, "MTV Era"),
-                (1995, "Hip-Hop Rise"),
-                (2005, "Digital/Streaming Era")
-            ]
-            
-            for year, era in music_eras:
-                fig_evolution.add_vline(x=year, line_dash="dash", line_color="gray", opacity=0.3)
-                fig_evolution.add_annotation(x=year, y=0.9, text=era, showarrow=False, 
-                                            textangle=-90, font=dict(size=10, color="gray"))
-            
-            st.plotly_chart(fig_evolution, use_container_width=True)
-            
-            # ---------------------------------------------------
-            # VIZ 2: Popularity vs Audio Features - ENHANCED
-            # ---------------------------------------------------
-            st.divider()
-            
-            st.subheader("2. Correlation Analysis: Popularity vs Audio Features")
-            st.info("**🔍 Key Questions:** Which audio feature best predicts commercial success? Are there threshold values that guarantee popularity? How do feature combinations create hit songs?")
-            
-            col_viz2_1, col_viz2_2, col_viz2_3 = st.columns(3)
-            
-            with col_viz2_1:
-                selected_feature = st.selectbox(
-                    "Select Audio Feature:",
-                    ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 'speechiness'],
-                    key="feature_selector"
-                )
-            
-            with col_viz2_2:
-                viz2_type = st.radio(
-                    "Visualization Type:",
-                    ["Scatter with Trend", "Hexbin Density", "Box Plot by Bins"],
-                    key="viz2_type"
-                )
-            
-            with col_viz2_3:
-                add_percentiles = st.checkbox("Show percentile lines", value=False, key="percentiles_viz2")
-            
-            # Sample for better performance
-            df_sample = df_filtered.sample(min(5000, len(df_filtered)))
-            
-            if viz2_type == "Scatter with Trend":
-                fig_correlation = px.scatter(
-                    df_sample,
-                    x=selected_feature,
-                    y='popularity',
-                    title=f'Popularity vs {selected_feature.capitalize()}',
-                    opacity=0.6,
-                    trendline='ols',
-                    labels={selected_feature: f'{selected_feature.capitalize()} (0-1)', 'popularity': 'Popularity Score'}
-                )
-                
-                if add_percentiles:
-                    # Add percentile lines
-                    p25 = df_sample[selected_feature].quantile(0.25)
-                    p75 = df_sample[selected_feature].quantile(0.75)
-                    fig_correlation.add_vline(x=p25, line_dash="dash", line_color="red", opacity=0.5)
-                    fig_correlation.add_vline(x=p75, line_dash="dash", line_color="green", opacity=0.5)
-                    
-            elif viz2_type == "Hexbin Density":
-                fig_correlation = px.density_heatmap(
-                    df_sample,
-                    x=selected_feature,
-                    y='popularity',
-                    title=f'Density: Popularity vs {selected_feature.capitalize()}',
-                    labels={selected_feature: f'{selected_feature.capitalize()} (0-1)', 'popularity': 'Popularity Score'},
-                    nbinsx=30,
-                    nbinsy=20
-                )
-                
-            else:  # Box Plot by Bins
-                # Create bins for the feature
-                df_sample['feature_bin'] = pd.cut(df_sample[selected_feature], bins=5, 
-                                                labels=['Very Low', 'Low', 'Medium', 'High', 'Very High'])
-                fig_correlation = px.box(
-                    df_sample,
-                    x='feature_bin',
-                    y='popularity',
-                    title=f'Popularity Distribution by {selected_feature.capitalize()} Levels',
-                    labels={'feature_bin': f'{selected_feature.capitalize()} Level', 'popularity': 'Popularity Score'}
-                )
-            
-            st.plotly_chart(fig_correlation, use_container_width=True)
-            
-            # Show correlation coefficient
-            correlation = df_filtered[selected_feature].corr(df_filtered['popularity'])
-            st.metric(f"Correlation Coefficient", f"{correlation:.3f}", 
-                    delta=f"{'Positive' if correlation > 0 else 'Negative'} correlation")
-
-            # ---------------------------------------------------
-            # VIZ 3: Genre Analysis - ENHANCED
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("3. Genre DNA: Audio Feature Signatures")
-            st.info("**🔍 Strategic Questions:** What is the unique 'DNA' of each genre? Which genres are converging in style? How can artists differentiate within saturated genres?")
-            
-            col_genre1, col_genre2 = st.columns(2)
-            
-            with col_genre1:
-                genre_feature = st.selectbox(
-                    "Select Audio Feature:",
-                    ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
-                    'speechiness', 'liveness', 'loudness', 'tempo'],
-                    key="genre_feature_selector"
-                )
-            
-            with col_genre2:
-                genre_viz_type = st.radio(
-                    "Visualization:",
-                    ["Box Plot", "Radar Chart"], # <-- ALTERAÇÃO: Removido "Violin Plot"
-                    horizontal=True,
-                    key="genre_viz_type"
-                )
-            
-            # Get top genres
-            top_genres = df_genres.nlargest(15, 'popularity')
-            
-            if genre_viz_type == "Box Plot":
-                fig_genre = px.box(
-                    top_genres,
-                    x='genres',
-                    y=genre_feature,
-                    color='genres',
-                    title=f'{genre_feature.capitalize()} Distribution Across Top 15 Genres',
-                    labels={'genres': 'Genre', genre_feature: f'{genre_feature.capitalize()}'}
-                )
-                fig_genre.update_layout(showlegend=False, xaxis_tickangle=-45)
-                
-            # <-- ALTERAÇÃO: O bloco "elif" para Violin Plot foi completamente removido
-                
-            else:  # Radar Chart (Este "else" agora é ativado quando "Radar Chart" é selecionado)
-                # Select top 8 genres for radar chart
-                import plotly.graph_objects as go
-                
-                top_8_genres = df_genres.nlargest(8, 'popularity')
-                features_for_radar = ['energy', 'danceability', 'valence', 'acousticness', 'speechiness']
-                
-                fig_genre = go.Figure()
-                
-                for _, genre_row in top_8_genres.iterrows():
-                    values = [genre_row[feat] for feat in features_for_radar]
-                    fig_genre.add_trace(go.Scatterpolar(
-                        r=values,
-                        theta=features_for_radar,
-                        fill='toself',
-                        name=genre_row['genres'][:20]
-                    ))
-                
-                fig_genre.update_layout(
-                    polar=dict(
-                        radialaxis=dict(
-                            visible=True,
-                            range=[0, 1]
-                        )),
-                    showlegend=True,
-                    title="Genre DNA: Audio Feature Signatures"
-                )
-            
-            st.plotly_chart(fig_genre, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 4: Explicit Content Strategy Analysis
-            # ---------------------------------------------------
-            st.divider()
-            
-            st.subheader("4. Explicit Content: Commercial Strategy Analysis")
-            st.info("**🔍 Strategic Questions:** Is explicit content a successful commercial strategy? Which genres benefit most from explicit content? Should artists release both clean and explicit versions?")
-            
-            # Create explicit label
-            df_filtered['explicit_label'] = df_filtered['explicit'].map({0: 'Clean', 1: 'Explicit'})
-            
-            col_exp1, col_exp2 = st.columns(2)
-            
-            with col_exp1:
-                # Popularity comparison
-                fig_explicit = px.violin(
-                    df_filtered[df_filtered['popularity'] > 0],
-                    x='explicit_label',
-                    y='popularity',
-                    color='explicit_label',
-                    title='Popularity Distribution: Clean vs Explicit',
-                    labels={'explicit_label': 'Content Type', 'popularity': 'Popularity Score'}
-                )
-                st.plotly_chart(fig_explicit, use_container_width=True)
-            
-            with col_exp2:
-                # Feature comparison
-                explicit_feature = st.selectbox(
-                    "Compare by feature:",
-                    ['energy', 'danceability', 'valence', 'speechiness'],
-                    key="explicit_feature"
-                )
-                
-                fig_explicit_feat = px.box(
-                    df_filtered,
-                    x='explicit_label',
-                    y=explicit_feature,
-                    color='explicit_label',
-                    title=f'{explicit_feature.capitalize()} by Content Type',
-                    labels={'explicit_label': 'Content Type', explicit_feature: explicit_feature.capitalize()}
-                )
-                st.plotly_chart(fig_explicit_feat, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 5: Feature Correlation & Clustering
-            # ---------------------------------------------------
-            st.divider()
-            
-            st.subheader("5. Feature Relationships: The Music Formula")
-            st.info("**🔍 Strategic Questions:** Which features must be balanced together? Can we identify 'formula' combinations for different popularity levels? What trade-offs do producers make?")
-            
-            # Toggle between correlation matrix and cluster analysis
-            analysis_type = st.radio(
-                "Analysis Type:",
-                ["Correlation Matrix", "Feature Pairs Analysis", "Success Formula"],
-                horizontal=True,
-                key="analysis_type_viz5"
-            )
-            
-            audio_features = ['danceability', 'energy', 'valence', 'acousticness', 
-                            'instrumentalness', 'liveness', 'loudness', 'speechiness', 'popularity']
-            
-            if analysis_type == "Correlation Matrix":
-                correlation_matrix = df_filtered[audio_features].corr()
-                
-                fig_heatmap = px.imshow(
-                    correlation_matrix,
-                    title='Correlation Between Audio Features',
-                    text_auto='.2f',
-                    aspect='auto',
-                    color_continuous_scale='RdBu_r'
-                )
-                st.plotly_chart(fig_heatmap, use_container_width=True)
-                
-            elif analysis_type == "Feature Pairs Analysis":
-                # Show strongest correlations
-                correlation_matrix = df_filtered[audio_features].corr()
-                
-                # Get correlations with popularity
-                pop_corr = correlation_matrix['popularity'].drop('popularity').sort_values(ascending=False)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("**Top Positive Correlations with Popularity:**")
-                    for feat, corr in pop_corr.head(3).items():
-                        st.write(f"• {feat}: {corr:.3f}")
-                
-                with col2:
-                    st.markdown("**Top Negative Correlations with Popularity:**")
-                    for feat, corr in pop_corr.tail(3).items():
-                        st.write(f"• {feat}: {corr:.3f}")
-                        
-            else:  # Success Formula
-                # Segment songs by popularity
-                df_success = df_filtered.copy()
-                df_success['success_level'] = pd.cut(df_success['popularity'], 
-                                                    bins=[0, 30, 60, 100],
-                                                    labels=['Low', 'Medium', 'High'])
-                
-                # Calculate mean features by success level
-                success_formula = df_success.groupby('success_level')[audio_features[:-1]].mean()
-                
-                fig_formula = px.bar(
-                    success_formula.T,
-                    title="The Success Formula: Average Features by Popularity Level",
-                    labels={'index': 'Audio Feature', 'value': 'Average Value'},
-                    barmode='group'
-                )
-                st.plotly_chart(fig_formula, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 6: Temporal Strategy Analysis
-            # ---------------------------------------------------
-            st.divider()
-            
-            st.subheader("6. Temporal Trends: Predicting the Future of Music")
-            st.info("**🔍 Strategic Questions:** Can we predict the next trend? Are songs converging to a standard formula? What features are becoming obsolete?")
-            
-            col_tempo1, col_tempo2 = st.columns(2)
-            
-            # Convert duration to minutes BEFORE using it
-            df_year_f = aggregate_by_year(df_filtered)
-            df_year_f["duration_min"] = df_year_f["duration_ms"] / 60000.0
-
-            
-            with col_tempo1:
-                # Add trend prediction toggle
-                show_prediction = st.checkbox("Show trend projection", value=False, key="prediction_duration")
-                
-                fig_duration = px.line(
-                    df_year_f[df_year_f["year"] >= 1960],
-                    x="year", y="duration_min",
-                    title="Song Duration: The Attention Span Crisis",
-                    labels={"duration_min": "Duration (minutes)", "year": "Year"}
-                )
-                
-                if show_prediction:
-                    # Simple linear projection
-                    try:
-                        from scipy import stats
-                        recent_years = df_year_f[df_year_f['year'] >= 2000].copy()
-                        
-                        # Make sure duration_min is calculated for recent_years
-                        if 'duration_min' not in recent_years.columns:
-                            recent_years['duration_min'] = recent_years['duration_ms'] / 60000
-                        
-                        # Check if we have valid data
-                        if len(recent_years) > 0 and not recent_years['duration_min'].isna().all():
-                            slope, intercept, _, _, _ = stats.linregress(recent_years['year'], recent_years['duration_min'])
-                            future_years = list(range(2020, 2031))
-                            future_duration = [slope * year + intercept for year in future_years]
-                            fig_duration.add_scatter(x=future_years, y=future_duration, mode='lines', 
-                                                    name='Projection', line=dict(dash='dash', color='red'))
-                    except:
-                        pass  # If scipy is not available or calculation fails, just skip projection
-                
-                st.plotly_chart(fig_duration, use_container_width=True)
-            
-            with col_tempo2:
-                            
-                fig_tempo = px.line(
-                    df_year_f[df_year_f['year'] >= 1960],
-                    x='year',
-                    y='tempo',
-                    title='Tempo Evolution: The BPM Arms Race',
-                    labels={'tempo': 'Tempo (BPM)', 'year': 'Year'}
-                )
-                st.plotly_chart(fig_tempo, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 7: Artist Success Patterns
-            # ---------------------------------------------------
-            st.divider()
-            
-            st.subheader("7. Artist Success Patterns: One-Hit Wonder vs Consistency")
-            st.info("**🔍 Strategic Questions:** What separates consistent hitmakers from one-hit wonders? Is it better to release many average songs or few excellent ones? How do successful artists maintain their sound signature?")
-            
-            # Enhanced artist analysis
-            artist_strategy = st.radio(
-                "Analysis Focus:",
-                ["Top 50 Artists Overview", "Consistency Analysis", "Feature Signature (Top 5)"],
-                horizontal=True,
-                key="artist_strategy"
-            )
-            
-            top_artists = df_artist.nlargest(50, 'popularity')
-            
-            if artist_strategy == "Top 50 Artists Overview":
-                fig_artists = px.scatter(
-                    top_artists,
-                    x='count',
-                    y='popularity',
-                    size='energy',
-                    color='valence',
-                    hover_data=['artists'],
-                    title='Artist Strategy: Volume vs Quality',
-                    labels={'count': 'Number of Tracks', 'popularity': 'Average Popularity', 'valence': 'Valence'}
-                )
-                
-                # Add quadrant lines
-                median_count = top_artists['count'].median()
-                median_pop = top_artists['popularity'].median()
-                fig_artists.add_hline(y=median_pop, line_dash="dash", line_color="gray", opacity=0.5)
-                fig_artists.add_vline(x=median_count, line_dash="dash", line_color="gray", opacity=0.5)
-                
-                # Add quadrant labels
-                fig_artists.add_annotation(x=median_count*0.3, y=median_pop*1.2, text="Quality over Quantity", 
-                                        showarrow=False, font=dict(color="green"))
-                fig_artists.add_annotation(x=median_count*1.7, y=median_pop*1.2, text="Consistent Hitmakers", 
-                                        showarrow=False, font=dict(color="#89ccff"))
-                
-            elif artist_strategy == "Consistency Analysis":
-                # Calculate coefficient of variation (std/mean) for each artist
-                artist_consistency = []
-                
-                for artist in top_artists['artists'].head(50):
-                    artist_songs = df[df['artists'].str.contains(artist, na=False, case=True)]['popularity']
-                    # --- FIM DA CORREÇÃO ---
-                    
-                    if len(artist_songs) > 1:
-                        cv = artist_songs.std() / artist_songs.mean() if artist_songs.mean() > 0 else 0
-                        artist_consistency.append({'artist': artist[:20], 'consistency': 1 - cv, 
-                                                'avg_popularity': artist_songs.mean()})
-                
-                consistency_df = pd.DataFrame(artist_consistency)
-                
-                # A verificação 'if empty' ainda é útil, caso alguns artistas 
-                # ainda não sejam encontrados.
-                if consistency_df.empty:
-                    st.info("Não foi possível calcular a consistência dos artistas. (Nenhuma correspondência de artista com >1 música encontrada nos dados brutos).")
-                    import plotly.graph_objects as go
-                    fig_artists = go.Figure()
-                    fig_artists.update_layout(title='Artist Consistency Score (No data to display)')
-                else:
-                    # O DataFrame é válido, então podemos criar o gráfico
-                    fig_artists = px.bar(
-                        consistency_df.sort_values('consistency', ascending=True),
-                        x='consistency',
-                        y='artist',
-                        orientation='h',
-                        color='avg_popularity',
-                        title='Artist Consistency Score (Higher = More Consistent)',
-                        labels={'consistency': 'Consistency Score', 'artist': 'Artist', 
-                                'avg_popularity': 'Avg Popularity'}
-                    )
-                            
-            else:  # Feature Signature
-                # Compare top 5 artists' average features
-                import plotly.graph_objects as go
-                
-                top_5_artists = top_artists.head(5)
-                features_for_signature = ['energy', 'danceability', 'valence', 'acousticness', 'speechiness']
-                
-                fig_artists = go.Figure()
-                
-                for _, artist_row in top_5_artists.iterrows():
-                    values = [artist_row[feat] for feat in features_for_signature]
-                    fig_artists.add_trace(go.Scatterpolar(
-                        r=values,
-                        theta=features_for_signature,
-                        fill='toself',
-                        name=artist_row['artists'][:20]
-                    ))
-                
-                fig_artists.update_layout(
-                    polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-                    showlegend=True,
-                    title="Artist Sound Signatures: What Makes Them Unique"
-                )
-            
-            st.plotly_chart(fig_artists, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 8: Interactive Feature Explorer - ENHANCED
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("8. Feature Interaction Explorer: Finding the Sweet Spot")
-            st.info("**🔍 Strategic Questions:** What feature combinations create viral hits? Are there 'dead zones' to avoid? How do different eras prefer different feature combinations?")
-            
-            col_exp1, col_exp2, col_exp3 = st.columns(3)
-            
-            with col_exp1:
-                feature_x = st.selectbox(
-                    "X-axis Feature:",
-                    ['danceability', 'energy', 'valence', 'acousticness', 'instrumentalness', 
-                    'speechiness', 'liveness', 'loudness', 'tempo', 'popularity'],
-                    index=0,
-                    key="density_x_feature"
-                )
-            
-            with col_exp2:
-                feature_y = st.selectbox(
-                    "Y-axis Feature:",
-                    ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
-                    'speechiness', 'liveness', 'loudness', 'tempo', 'popularity'],
-                    index=0,
-                    key="density_y_feature"
-                )
-            
-            with col_exp3:
-                viz_style = st.radio(
-                    "Style:",
-                    ["Density Heatmap", "Scatter with Size", "Contour Plot"],
-                    key="viz_style_8"
-                )
-            
-            # Add decade filter for this specific viz
-            decade_filter_8 = st.select_slider(
-                "Filter by Decade Range:",
-                options=sorted(df[df['decade'] >= 1950]['decade'].unique()),
-                value=(1990, 2020),
-                key="decade_filter_8"
-            )
-            
-            # Filter data
-            df_density = df_filtered[(df_filtered['decade'] >= decade_filter_8[0]) & 
-                                    (df_filtered['decade'] <= decade_filter_8[1])]
-            df_density_sample = df_density.sample(min(10000, len(df_density)), random_state=42)
-            
-            if viz_style == "Density Heatmap":
-                fig_density = px.density_heatmap(
-                    df_density_sample,
-                    x=feature_x,
-                    y=feature_y,
-                    title=f'Feature Sweet Spots: {feature_x.capitalize()} vs {feature_y.capitalize()}',
-                    labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()},
-                    nbinsx=30,
-                    nbinsy=30,
-                    color_continuous_scale='Viridis'
-                )
-                
-            elif viz_style == "Scatter with Size":
-                fig_density = px.scatter(
-                    df_density_sample.sample(min(2000, len(df_density_sample))),
-                    x=feature_x,
-                    y=feature_y,
-                    size='popularity',
-                    color='decade',
-                    title=f'Feature Combinations: Size = Popularity',
-                    labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()},
-                    opacity=0.6
-                )
-                
-            else:  # Contour Plot
-                fig_density = px.density_contour(
-                    df_density_sample,
-                    x=feature_x,
-                    y=feature_y,
-                    title=f'Density Contours: {feature_x.capitalize()} vs {feature_y.capitalize()}',
-                    labels={feature_x: feature_x.capitalize(), feature_y: feature_y.capitalize()}
-                )
-                fig_density.update_traces(contours_coloring="fill", contours_showlabels=True)
-            
-            st.plotly_chart(fig_density, use_container_width=True)
-            
-            # Show insights
-            high_pop_threshold = df_density['popularity'].quantile(0.75)
-            sweet_spot_df = df_density[(df_density['popularity'] > high_pop_threshold)]
-            
-            if len(sweet_spot_df) > 0:
-                col_insight1, col_insight2 = st.columns(2)
-                with col_insight1:
-                    st.metric(f"Sweet Spot {feature_x.capitalize()}", 
-                            f"{sweet_spot_df[feature_x].mean():.2f}",
-                            f"±{sweet_spot_df[feature_x].std():.2f}")
-                with col_insight2:
-                    st.metric(f"Sweet Spot {feature_y.capitalize()}", 
-                            f"{sweet_spot_df[feature_y].mean():.2f}",
-                            f"±{sweet_spot_df[feature_y].std():.2f}")
-
-            # ---------------------------------------------------
-            # VIZ 9: Musical Key Strategy
-            # ---------------------------------------------------
-            st.divider()
-            
-            st.subheader("9. Musical Key & Mode: The Emotional Blueprint")
-            st.info("**🔍 Strategic Questions:** Do certain keys resonate better with audiences? Should artists favor major (happy) or minor (sad) keys? Is there a 'golden key' for hits?")
-            
-            # Map keys to musical notation
-            key_mapping = {0: 'C', 1: 'C#', 2: 'D', 3: 'D#', 4: 'E', 5: 'F',
-                        6: 'F#', 7: 'G', 8: 'G#', 9: 'A', 10: 'A#', 11: 'B'}
-            
-            df_filtered['key_name'] = df_filtered['key'].map(key_mapping)
-            df_filtered['mode_name'] = df_filtered['mode'].map({0: 'Minor', 1: 'Major'})
-            
-            key_analysis = st.radio(
-                "Analysis Type:",
-                ["Distribution", "Popularity by Key", "Emotional Impact"],
-                horizontal=True,
-                key="key_analysis"
-            )
-            
-            if key_analysis == "Distribution":
-                # Count combinations
-                key_mode_counts = df_filtered.groupby(['key_name', 'mode_name']).size().reset_index(name='count')
-                
-                fig_keys = px.bar(
-                    key_mode_counts,
-                    x='key_name',
-                    y='count',
-                    color='mode_name',
-                    title='Distribution of Musical Keys (Major vs Minor)',
-                    labels={'key_name': 'Musical Key', 'count': 'Number of Songs', 'mode_name': 'Mode'},
-                    category_orders={'key_name': ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']}
-                )
-                
-            elif key_analysis == "Popularity by Key":
-                # Average popularity by key
-                key_popularity = df_filtered.groupby(['key_name', 'mode_name'])['popularity'].mean().reset_index()
-                
-                fig_keys = px.bar(
-                    key_popularity,
-                    x='key_name',
-                    y='popularity',
-                    color='mode_name',
-                    title='Average Popularity by Musical Key',
-                    labels={'key_name': 'Musical Key', 'popularity': 'Average Popularity', 'mode_name': 'Mode'},
-                    category_orders={'key_name': ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']},
-                    barmode='group'
-                )
-                
-            else:  # Emotional Impact
-                # Compare valence (happiness) between major and minor
-                fig_keys = px.box(
-                    df_filtered,
-                    x='mode_name',
-                    y='valence',
-                    color='mode_name',
-                    title='Emotional Impact: Valence in Major vs Minor Keys',
-                    labels={'mode_name': 'Mode', 'valence': 'Valence (Happiness)'}
-                )
-            
-            st.plotly_chart(fig_keys, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 10: Decade Evolution Deep Dive
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("10. Decade Evolution: The Sound of Generations")
-            st.info("**🔍 Strategic Questions:** How homogeneous is modern music? Which decades had the most experimental music? Can we identify the 'signature sound' of each generation?")
-            
-            col_decade1, col_decade2 = st.columns(2)
-            
-            with col_decade1:
-                decade_feature = st.selectbox(
-                    "Select Feature:",
-                    ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 
-                    'speechiness', 'liveness', 'loudness'],
-                    key="decade_feature_selector"
-                )
-            
-            with col_decade2:
-                show_variance = st.checkbox("Show variance analysis", value=False, key="variance_decade")
-            
-            # Filter for relevant decades
-            df_decades = df_filtered[df_filtered['decade'] >= 1950].copy()
-            
-            if not show_variance:
-                fig_decade_box = px.box(
-                    df_decades,
-                    x='decade',
-                    y=decade_feature,
-                    color='decade',
-                    title=f'{decade_feature.capitalize()} Evolution by Decade',
-                    labels={'decade': 'Decade', decade_feature: f'{decade_feature.capitalize()}'}
-                )
-                fig_decade_box.update_layout(showlegend=False)
-                
-            else:
-                # Calculate variance by decade
-                variance_by_decade = df_decades.groupby('decade')[decade_feature].agg(['mean', 'std']).reset_index()
-                variance_by_decade['cv'] = variance_by_decade['std'] / variance_by_decade['mean']
-                
-                fig_decade_box = px.line(
-                    variance_by_decade,
-                    x='decade',
-                    y='cv',
-                    title=f'Musical Diversity: {decade_feature.capitalize()} Variance Over Time',
-                    labels={'decade': 'Decade', 'cv': 'Coefficient of Variation'},
-                    markers=True
-                )
-                fig_decade_box.add_hline(y=variance_by_decade['cv'].mean(), 
-                                        line_dash="dash", line_color="red", opacity=0.5)
-            
-            st.plotly_chart(fig_decade_box, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 11: Genre Popularity & Market Share
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("11. Genre Economics: Market Share & Commercial Viability")
-            st.info("**🔍 Strategic Questions:** Which genres dominate the market? Are niche genres more loyal? Where should new artists position themselves for maximum impact?")
-            
-            genre_view = st.radio(
-                "View:",
-                ["Top Genres by Popularity", "Genre Market Share", "Genre Loyalty Index"],
-                horizontal=True,
-                key="genre_view"
-            )
-            
-            if genre_view == "Top Genres by Popularity":
-                # Get top 20 genres by popularity
-                gframe = align_genre_frame(music_data["with_genres"], filters)
-                df_genres_f = aggregate_by_genre(gframe)
-
-                # Top Genres by Popularity:
-                top_genres_pop = df_genres_f.nlargest(20, "popularity")[["genres","popularity"]]
-                
-                fig_top_genres = px.bar(
-                    top_genres_pop,
-                    x='popularity',
-                    y='genres',
-                    orientation='h',
-                    color='popularity',
-                    color_continuous_scale='Viridis',
-                    title='Genre Power Rankings: Commercial Appeal',
-                    labels={'genres': 'Genre', 'popularity': 'Average Popularity'}
-                )
-                fig_top_genres.update_layout(height=600, yaxis={'categoryorder':'total ascending'})
-                
-            elif genre_view == "Genre Market Share":
-                # Calculate market share (number of tracks)
-                genre_counts = music_data['with_genres']['genres'].value_counts().head(15)
-                
-                fig_top_genres = px.pie(
-                    values=genre_counts.values,
-                    names=genre_counts.index,
-                    title='Genre Market Share by Track Volume'
-                )
-                
-            else:  # Genre Loyalty Index
-                # Calculate consistency (inverse of std deviation)
-                genre_loyalty = []
-                for genre in df_genres.nlargest(15, 'popularity')['genres']:
-                    genre_data = music_data['with_genres'][music_data['with_genres']['genres'] == genre]
-                    if len(genre_data) > 10:
-                        loyalty = 1 / (genre_data['popularity'].std() + 1)  # +1 to avoid division by zero
-                        genre_loyalty.append({'genre': genre[:20], 'loyalty_index': loyalty * 100,
-                                            'avg_popularity': genre_data['popularity'].mean()})
-                
-                loyalty_df = pd.DataFrame(genre_loyalty).sort_values('loyalty_index', ascending=True)
-                
-                fig_top_genres = px.scatter(
-                    loyalty_df,
-                    x='avg_popularity',
-                    y='loyalty_index',
-                    text='genre',
-                    title='Genre Loyalty vs Popularity: Finding Your Niche',
-                    labels={'loyalty_index': 'Loyalty Index', 'avg_popularity': 'Average Popularity'}
-                )
-                fig_top_genres.update_traces(textposition='top center')
-            
-            st.plotly_chart(fig_top_genres, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 12: Tempo-Popularity Sweet Spots
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("12. The Tempo Formula: BPM Success Zones")
-            st.info("**🔍 Strategic Questions:** Is there an optimal BPM for chart success? Do different decades prefer different tempos? Should producers target specific BPM ranges?")
-            
-            # Add BPM zones
-            df_tempo = df_filtered.copy()
-            df_tempo['bpm_zone'] = pd.cut(df_tempo['tempo'], 
-                                        bins=[0, 80, 100, 120, 140, 200],
-                                        labels=['Slow (<80)', 'Moderate (80-100)', 
-                                                'Dance (100-120)', 'Fast (120-140)', 'Very Fast (>140)'])
-            
-            tempo_analysis = st.radio(
-                "Analysis:",
-                ["Density Map", "Success Zones", "Evolution"],
-                horizontal=True,
-                key="tempo_analysis"
-            )
-            
-            if tempo_analysis == "Density Map":
-                # Sample data for better performance
-                df_tempo_sample = df_tempo.sample(min(10000, len(df_tempo)))
-                
-                fig_tempo_density = px.density_heatmap(
-                    df_tempo_sample,
-                    x='tempo',
-                    y='popularity',
-                    title='Tempo-Popularity Heat Map: Where Success Lives',
-                    labels={'tempo': 'Tempo (BPM)', 'popularity': 'Popularity Score'},
-                    nbinsx=40,
-                    nbinsy=30
-                )
-                
-            elif tempo_analysis == "Success Zones":
-                # Average popularity by BPM zone
-                bpm_success = df_tempo.groupby('bpm_zone')['popularity'].agg(['mean', 'std', 'count']).reset_index()
-                
-                fig_tempo_density = px.bar(
-                    bpm_success,
-                    x='bpm_zone',
-                    y='mean',
-                    error_y='std',
-                    title='Popularity by BPM Zone',
-                    labels={'bpm_zone': 'BPM Zone', 'mean': 'Average Popularity'},
-                    color='mean',
-                    color_continuous_scale='RdYlGn'
-                )
-                
-            else:  # Evolution
-                # BPM zones over decades
-                tempo_evolution = df_tempo.groupby(['decade', 'bpm_zone']).size().reset_index(name='count')
-                tempo_evolution = tempo_evolution[tempo_evolution['decade'] >= 1960]
-                
-                fig_tempo_density = px.bar(
-                    tempo_evolution,
-                    x='decade',
-                    y='count',
-                    color='bpm_zone',
-                    title='Evolution of Tempo Preferences Over Decades',
-                    labels={'decade': 'Decade', 'count': 'Number of Tracks'},
-                    barnorm='percent'
-                )
-            
-            st.plotly_chart(fig_tempo_density, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 13: Explicit Content Strategy Over Time
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("13. Explicit Content Evolution: Cultural Shifts & Commercial Impact")
-            st.info("**🔍 Strategic Questions:** When did explicit content become mainstream? Which genres pioneered explicit content? Is the trend reversing or accelerating?")
-            
-            explicit_view = st.radio(
-                "View:",
-                ["Timeline", "By Genre", "Commercial Impact"],
-                horizontal=True,
-                key="explicit_view"
-            )
-            
-            if explicit_view == "Timeline":
-                # Group by year and explicit
-                explicit_years = (df_filtered[df_filtered["year"] >= 1960]
-                                .groupby(["year","explicit"])
-                                .size().reset_index(name="count"))
-                explicit_years["explicit_label"] = explicit_years["explicit"].map({0:"Clean",1:"Explicit"})
-
-                fig_explicit_years = px.area(
-                    explicit_years,
-                    x='year',
-                    y='count',
-                    color='explicit_label',
-                    title='The Rise of Explicit Content (1960-2020)',
-                    labels={'year': 'Year', 'count': 'Number of Tracks', 'explicit_label': 'Content Type'},
-                    color_discrete_map={'Clean': '#2E7D32', 'Explicit': '#D32F2F'}
-                )
-                
-            elif explicit_view == "By Genre":
-                # Explicit percentage by genre
-                genre_explicit = music_data['with_genres'].copy()
-                genre_explicit['explicit'] = genre_explicit.get('explicit', 0)
-                
-                top_genres_list = df_genres.nlargest(10, 'popularity')['genres'].tolist()
-                
-                explicit_by_genre = []
-                for genre in top_genres_list:
-                    genre_data = genre_explicit[genre_explicit['genres'] == genre]
-                    if len(genre_data) > 0:
-                        explicit_pct = (genre_data['explicit'].sum() / len(genre_data)) * 100
-                        explicit_by_genre.append({'genre': genre[:20], 'explicit_percentage': explicit_pct})
-                
-                explicit_genre_df = pd.DataFrame(explicit_by_genre).sort_values('explicit_percentage')
-                
-                fig_explicit_years = px.bar(
-                    explicit_genre_df,
-                    x='explicit_percentage',
-                    y='genre',
-                    orientation='h',
-                    title='Explicit Content by Genre (%)',
-                    labels={'genre': 'Genre', 'explicit_percentage': 'Explicit Content (%)'},
-                    color='explicit_percentage',
-                    color_continuous_scale='Reds'
-                )
-                
-            else:  # Commercial Impact
-                # Compare popularity over time
-                explicit_impact = df[df['year'] >= 1980].groupby(['year', 'explicit'])['popularity'].mean().reset_index()
-                explicit_impact['explicit_label'] = explicit_impact['explicit'].map({0: 'Clean', 1: 'Explicit'})
-                
-                fig_explicit_years = px.line(
-                    explicit_impact,
-                    x='year',
-                    y='popularity',
-                    color='explicit_label',
-                    title='Commercial Performance: Clean vs Explicit Over Time',
-                    labels={'year': 'Year', 'popularity': 'Average Popularity', 'explicit_label': 'Content Type'},
-                    markers=True
-                )
-            
-            st.plotly_chart(fig_explicit_years, use_container_width=True)
-
-            # ---------------------------------------------------
-            # VIZ 14: Popularity Lifecycle & Trends
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("14. The Popularity Lifecycle: Understanding Music Relevance")
-            st.info("**🔍 Strategic Questions:** How long do songs stay relevant? Are older songs experiencing a streaming renaissance? What makes a song 'timeless'?")
-            
-            popularity_view = st.radio(
-                "Analysis:",
-                ["Overall Trend", "By Era", "Timeless Features"],
-                horizontal=True,
-                key="popularity_view"
-            )
-            
-            # Filter for recent years with enough data
-            df_year_f = aggregate_by_year(df_filtered)
-            popularity_trend = df_year_f[df_year_f["year"] >= 1920][["year","popularity"]]
-            
-            if popularity_view == "Overall Trend":
-                fig_pop_trend = px.line(
-                    popularity_trend,
-                    x='year',
-                    y='popularity',
-                    title='The Streaming Effect: How Digital Platforms Changed Music Popularity',
-                    labels={'year': 'Year', 'popularity': 'Average Popularity'},
-                    markers=True
-                )
-                
-                # Add streaming era marker
-                fig_pop_trend.add_vline(x=2006, line_dash="dash", line_color="green", opacity=0.5)
-                fig_pop_trend.add_annotation(x=2006, y=popularity_trend['popularity'].max()*0.9, 
-                                            text="Spotify Launch", showarrow=True)
-                
-                # Add trend line
-                fig_pop_trend.add_scatter(
-                    x=popularity_trend['year'],
-                    y=popularity_trend['popularity'].rolling(window=10, center=True).mean(),
-                    mode='lines',
-                    name='10-Year Moving Average',
-                    line=dict(color='red', dash='dash')
-                )
-                
-            elif popularity_view == "By Era":
-                # Define music eras
-                df_eras = df.copy()
-                df_eras['era'] = pd.cut(df_eras['year'], 
-                                        bins=[0, 1960, 1980, 1990, 2000, 2010, 2025],
-                                        labels=['Pre-1960', '1960s-70s', '1980s', '1990s', '2000s', '2010s+'])
-                
-                era_popularity = df_eras.groupby('era')['popularity'].agg(['mean', 'std']).reset_index()
-                
-                fig_pop_trend = px.bar(
-                    era_popularity,
-                    x='era',
-                    y='mean',
-                    error_y='std',
-                    title='Popularity by Musical Era',
-                    labels={'era': 'Era', 'mean': 'Average Popularity'},
-                    color='mean',
-                    color_continuous_scale='Blues'
-                )
-                
-            else:  # Timeless Features
-                # Compare features of consistently popular songs vs others
-                timeless_threshold = df['popularity'].quantile(0.7)
-                df_timeless = df.copy()
-                df_timeless['is_timeless'] = df_timeless['popularity'] > timeless_threshold
-                
-                features_compare = ['energy', 'danceability', 'valence', 'acousticness']
-                timeless_features = df_timeless.groupby('is_timeless')[features_compare].mean().T
-                timeless_features.columns = ['Regular', 'Timeless']
-                
-                fig_pop_trend = px.bar(
-                    timeless_features,
-                    title='The DNA of Timeless Songs',
-                    labels={'index': 'Feature', 'value': 'Average Value'},
-                    barmode='group'
-                )
-            
-            st.plotly_chart(fig_pop_trend, use_container_width=True)
-            
-
-            # ---------------------------------------------------
-            # VIZ 15: ARTIST EVOLUTION OVER TIME
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("15. Artist Evolution: The Rise and Fall of Music Icons")
-            st.info("**🔍 Strategic Questions:** Which artists dominated different eras? How has artist longevity changed? Can we identify 'comeback' artists or one-era wonders?")
-
-            # Prepare the data
-            artist_time_analysis = st.radio(
-                "Analysis Type:",
-                ["Top Artists Timeline", "Artist Dominance by Decade", "Longevity Analysis", "Rising Stars"],
-                horizontal=True,
-                key="artist_time_analysis"
-            )
-
-            if artist_time_analysis == "Top Artists Timeline":
-                # Sub-options for timeline view
-                col_art_time1, col_art_time2, col_art_time3 = st.columns(3)
-                
-                with col_art_time1:
-                    metric_choice = st.selectbox(
-                        "Metric:",
-                        ["Average Popularity", "Track Count", "Maximum Popularity"],
-                        key="artist_timeline_metric"
-                    )
-                
-                with col_art_time2:
-                    time_granularity = st.selectbox(
-                        "Time Period:",
-                        ["By Year", "By Decade", "By 5-Year Period"],
-                        key="time_granularity"
-                    )
-                
-                with col_art_time3:
-                    top_n_artists = st.slider(
-                        "Number of Artists:",
-                        min_value=5,
-                        max_value=30,
-                        value=15,
-                        step=5,
-                        key="top_n_timeline"
-                    )
-                
-                # Filter data for reasonable time period
-                df_artist_time = df_filtered[df_filtered['year'] >= 1960].copy()
-                
-                # Determine time column based on granularity
-                if time_granularity == "By Decade":
-                    df_artist_time['time_period'] = df_artist_time['decade']
-                    time_col = 'time_period'
-                elif time_granularity == "By 5-Year Period":
-                    df_artist_time['time_period'] = (df_artist_time['year'] // 5) * 5
-                    time_col = 'time_period'
-                else:  # By Year
-                    time_col = 'year'
-                    df_artist_time['time_period'] = df_artist_time['year']
-                
-                # Clean artist names (remove brackets and quotes)
-                df_artist_time['artist_clean'] = df_artist_time['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
-                
-                # Split artists if multiple (take first artist only for simplicity)
-                df_artist_time['artist_clean'] = df_artist_time['artist_clean'].str.split(',').str[0].str.strip()
-                
-                # Calculate metrics based on choice
-                if metric_choice == "Average Popularity":
-                    artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean'])['popularity'].mean().reset_index()
-                    metric_col = 'popularity'
-                    metric_label = 'Average Popularity'
-                elif metric_choice == "Track Count":
-                    artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean']).size().reset_index(name='track_count')
-                    metric_col = 'track_count'
-                    metric_label = 'Number of Tracks'
-                else:  # Maximum Popularity
-                    artist_metrics = df_artist_time.groupby(['time_period', 'artist_clean'])['popularity'].max().reset_index()
-                    metric_col = 'popularity'
-                    metric_label = 'Maximum Popularity'
-                
-                # Get top artists overall (across all time periods)
-                top_artists_overall = artist_metrics.groupby('artist_clean')[metric_col].mean().nlargest(top_n_artists).index.tolist()
-                
-                # Filter for top artists
-                artist_metrics_filtered = artist_metrics[artist_metrics['artist_clean'].isin(top_artists_overall)]
-                
-                # Create line chart
-                fig_artist_timeline = px.line(
-                    artist_metrics_filtered,
-                    x='time_period',
-                    y=metric_col,
-                    color='artist_clean',
-                    title=f'Top {top_n_artists} Artists: {metric_label} Over Time',
-                    labels={'time_period': time_granularity.replace('By ', ''), 
-                            metric_col: metric_label, 
-                            'artist_clean': 'Artist'},
-                    markers=True,
-                    template='plotly_dark'
-                )
-                
-                # Update layout for better visibility
-                fig_artist_timeline.update_layout(
-                    plot_bgcolor='#181818',
-                    paper_bgcolor='#181818',
-                    font_color='#B3B3B3',
-                    hovermode='x unified',
-                    legend=dict(
-                        orientation="v",
-                        yanchor="middle",
-                        y=0.5,
-                        xanchor="left",
-                        x=1.02
-                    ),
-                    height=600
-                )
-                
-                # Add range slider for better navigation
-                fig_artist_timeline.update_xaxes(rangeslider_visible=True)
-                
-                st.plotly_chart(fig_artist_timeline, use_container_width=True)
-                
-                # Show summary statistics
-                col_stat1, col_stat2, col_stat3 = st.columns(3)
-                with col_stat1:
-                    most_consistent = artist_metrics_filtered.groupby('artist_clean').size().idxmax()
-                    appearances = artist_metrics_filtered.groupby('artist_clean').size().max()
-                    st.metric("Most Consistent Artist", most_consistent[:25], f"{appearances} periods")
-                with col_stat2:
-                    peak_artist = artist_metrics_filtered.loc[artist_metrics_filtered[metric_col].idxmax(), 'artist_clean']
-                    peak_value = artist_metrics_filtered[metric_col].max()
-                    st.metric(f"Peak {metric_label}", peak_artist[:25], f"{peak_value:.1f}")
-                with col_stat3:
-                    recent_period = artist_metrics_filtered['time_period'].max()
-                    recent_top = artist_metrics_filtered[artist_metrics_filtered['time_period'] == recent_period].nlargest(1, metric_col)['artist_clean'].values[0] if len(artist_metrics_filtered[artist_metrics_filtered['time_period'] == recent_period]) > 0 else "N/A"
-                    st.metric("Current Leader", recent_top[:25], f"In {recent_period}")
-
-            elif artist_time_analysis == "Artist Dominance by Decade":
-                # Analyze which artists dominated each decade
-                decade_selection = st.select_slider(
-                    "Select Decade Range:",
-                    options=sorted(df[df['decade'] >= 1950]['decade'].unique()),
-                    value=(1970, 2020),
-                    key="dominance_decade_range"
-                )
-                
-                # Filter data
-                df_dominance = df_filtered[(df_filtered['decade'] >= decade_selection[0]) & 
-                                        (df_filtered['decade'] <= decade_selection[1])].copy()
-                
-                # Clean artist names
-                df_dominance['artist_clean'] = df_dominance['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
-                df_dominance['artist_clean'] = df_dominance['artist_clean'].str.split(',').str[0].str.strip()
-                
-                # Calculate dominance score (combination of track count and average popularity)
-                dominance_by_decade = []
-                
-                for decade in range(decade_selection[0], decade_selection[1] + 10, 10):
-                    decade_data = df_dominance[df_dominance['decade'] == decade]
-                    if len(decade_data) > 0:
-                        # Get top 10 artists for this decade
-                        artist_stats = decade_data.groupby('artist_clean').agg({
-                            'popularity': ['mean', 'max', 'count']
-                        }).round(2)
-                        artist_stats.columns = ['avg_popularity', 'max_popularity', 'track_count']
-                        
-                        # Calculate dominance score
-                        artist_stats['dominance_score'] = (
-                            artist_stats['avg_popularity'] * 0.5 + 
-                            artist_stats['max_popularity'] * 0.3 + 
-                            artist_stats['track_count'] * 0.2
-                        )
-                        
-                        # Get top 10 for this decade
-                        top_decade_artists = artist_stats.nlargest(10, 'dominance_score')
-                        
-                        for artist, row in top_decade_artists.iterrows():
-                            dominance_by_decade.append({
-                                'decade': decade,
-                                'artist': artist[:30],
-                                'dominance_score': row['dominance_score'],
-                                'avg_popularity': row['avg_popularity'],
-                                'track_count': row['track_count']
-                            })
-                
-                dominance_df = pd.DataFrame(dominance_by_decade)
-                
-                # Create heatmap
-                if not dominance_df.empty:
-                    # Pivot for heatmap
-                    heatmap_data = dominance_df.pivot_table(
-                        index='artist',
-                        columns='decade',
-                        values='dominance_score',
-                        fill_value=0
-                    )
-                    
-                    # Sort by total dominance
-                    heatmap_data['total'] = heatmap_data.sum(axis=1)
-                    heatmap_data = heatmap_data.sort_values('total', ascending=False).drop('total', axis=1).head(20)
-                    
-                    fig_dominance = px.imshow(
-                        heatmap_data,
-                        title='Artist Dominance Heatmap by Decade',
-                        labels=dict(x="Decade", y="Artist", color="Dominance Score"),
-                        aspect="auto",
-                        color_continuous_scale="Viridis",
-                        template='plotly_dark'
-                    )
-                    
-                    fig_dominance.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3',
-                        height=700
-                    )
-                    
-                    st.plotly_chart(fig_dominance, use_container_width=True)
-                    
-                    # Show decade leaders
-                    st.markdown("### 👑 Decade Leaders")
-                    decade_leaders = dominance_df.sort_values(['decade', 'dominance_score'], ascending=[True, False])
-                    decade_leaders = decade_leaders.groupby('decade').first().reset_index()
-                    
-                    cols = st.columns(len(decade_leaders))
-                    for idx, (_, leader) in enumerate(decade_leaders.iterrows()):
-                        with cols[idx]:
-                            st.metric(
-                                f"{int(leader['decade'])}s",
-                                leader['artist'][:20],
-                                f"Score: {leader['dominance_score']:.1f}"
-                            )
-                else:
-                    st.info("No data available for the selected decade range.")
-
-            elif artist_time_analysis == "Longevity Analysis":
-                # Analyze artist career spans and consistency
-                st.markdown("### 🏆 Artist Career Longevity & Consistency")
-                
-                # Minimum tracks threshold
-                min_tracks = st.slider(
-                    "Minimum tracks to be included:",
-                    min_value=5,
-                    max_value=50,
-                    value=10,
-                    step=5,
-                    key="longevity_min_tracks"
-                )
-                
-                # Clean artist names
-                df_longevity = df_filtered.copy()
-                df_longevity['artist_clean'] = df_longevity['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
-                df_longevity['artist_clean'] = df_longevity['artist_clean'].str.split(',').str[0].str.strip()
-                
-                # Calculate longevity metrics
-                longevity_stats = df_longevity.groupby('artist_clean').agg({
-                    'year': ['min', 'max', 'nunique'],
-                    'popularity': ['mean', 'std', 'max'],
-                    'name': 'count'  # track count
-                }).round(2)
-                
-                longevity_stats.columns = ['first_year', 'last_year', 'active_years', 
-                                        'avg_popularity', 'std_popularity', 'max_popularity', 'track_count']
-                
-                # Filter by minimum tracks
-                longevity_stats = longevity_stats[longevity_stats['track_count'] >= min_tracks]
-                
-                # Calculate career span and consistency score
-                longevity_stats['career_span'] = longevity_stats['last_year'] - longevity_stats['first_year']
-                longevity_stats['consistency_score'] = (longevity_stats['avg_popularity'] / 
-                                                    (longevity_stats['std_popularity'] + 1)) * (longevity_stats['active_years'] / longevity_stats['career_span'].clip(lower=1))
-                
-                # Reset index to get artist names as column
-                longevity_stats = longevity_stats.reset_index()
-                
-                # Get top artists by different metrics
-                col_long1, col_long2 = st.columns(2)
-                
-                with col_long1:
-                    # Longest careers
-                    fig_career_span = px.scatter(
-                        longevity_stats.nlargest(30, 'career_span'),
-                        x='career_span',
-                        y='avg_popularity',
-                        size='track_count',
-                        color='consistency_score',
-                        hover_data=['artist_clean', 'first_year', 'last_year'],
-                        title='Longest Career Spans (Top 30)',
-                        labels={'career_span': 'Career Span (Years)', 
-                            'avg_popularity': 'Average Popularity',
-                            'consistency_score': 'Consistency'},
-                        template='plotly_dark',
-                        color_continuous_scale='Viridis'
-                    )
-                    
-                    fig_career_span.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3'
-                    )
-                    
-                    st.plotly_chart(fig_career_span, use_container_width=True)
-                
-                with col_long2:
-                    # Most consistent artists
-                    fig_consistency = px.bar(
-                        longevity_stats.nlargest(15, 'consistency_score'),
-                        x='consistency_score',
-                        y='artist_clean',
-                        orientation='h',
-                        color='avg_popularity',
-                        title='Most Consistent Artists (Top 15)',
-                        labels={'consistency_score': 'Consistency Score', 
-                            'artist_clean': 'Artist',
-                            'avg_popularity': 'Avg Popularity'},
-                        template='plotly_dark',
-                        color_continuous_scale='Viridis'
-                    )
-                    
-                    fig_consistency.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3',
-                        yaxis={'categoryorder':'total ascending'}
-                    )
-                    
-                    st.plotly_chart(fig_consistency, use_container_width=True)
-                
-                # Career type classification
-                st.markdown("### 🎭 Artist Career Types")
-                
-                # Classify artists
-                longevity_stats['career_type'] = 'Standard'
-                longevity_stats.loc[(longevity_stats['career_span'] > 20) & 
-                                (longevity_stats['avg_popularity'] > 50), 'career_type'] = 'Legend'
-                longevity_stats.loc[(longevity_stats['career_span'] < 5) & 
-                                (longevity_stats['max_popularity'] > 70), 'career_type'] = 'One-Hit Wonder'
-                longevity_stats.loc[(longevity_stats['career_span'] > 10) & 
-                                (longevity_stats['consistency_score'] > longevity_stats['consistency_score'].quantile(0.75)), 
-                                'career_type'] = 'Steady Performer'
-                
-                # Show distribution
-                career_distribution = longevity_stats['career_type'].value_counts()
-                
-                col_type1, col_type2, col_type3, col_type4 = st.columns(4)
-                
-                for idx, (career_type, count) in enumerate(career_distribution.items()):
-                    col = [col_type1, col_type2, col_type3, col_type4][idx % 4]
-                    with col:
-                        emoji = {'Legend': '👑', 'One-Hit Wonder': '🌟', 
-                                'Steady Performer': '📊', 'Standard': '🎵'}.get(career_type, '🎵')
-                        st.metric(f"{emoji} {career_type}", f"{count} artists", 
-                                f"{(count/len(longevity_stats)*100):.1f}%")
-
-            else:  # Rising Stars
-                # Identify artists with rapid growth
-                st.markdown("### 🚀 Rising Stars & Trending Artists")
-                
-                # Time window for analysis
-                window_years = st.slider(
-                    "Analysis window (recent years):",
-                    min_value=5,
-                    max_value=20,
-                    value=10,
-                    step=5,
-                    key="rising_window"
-                )
-                
-                current_year = df_filtered['year'].max()
-                cutoff_year = current_year - window_years
-                
-                # Split data into periods
-                df_recent = df_filtered[df_filtered['year'] > cutoff_year].copy()
-                df_previous = df_filtered[(df_filtered['year'] <= cutoff_year) & 
-                                        (df_filtered['year'] > cutoff_year - window_years)].copy()
-                
-                # Clean artist names
-                for data in [df_recent, df_previous]:
-                    data['artist_clean'] = data['artists'].str.replace(r"[\[\]'\"]", "", regex=True)
-                    data['artist_clean'] = data['artist_clean'].str.split(',').str[0].str.strip()
-                
-                # Calculate metrics for both periods
-                recent_stats = df_recent.groupby('artist_clean').agg({
-                    'popularity': 'mean',
-                    'name': 'count'
-                }).rename(columns={'popularity': 'recent_pop', 'name': 'recent_tracks'})
-                
-                previous_stats = df_previous.groupby('artist_clean').agg({
-                    'popularity': 'mean',
-                    'name': 'count'
-                }).rename(columns={'popularity': 'previous_pop', 'name': 'previous_tracks'})
-                
-                # Merge and calculate growth
-                growth_analysis = pd.merge(recent_stats, previous_stats, 
-                                        left_index=True, right_index=True, how='left')
-                growth_analysis = growth_analysis.fillna(0)
-                
-                # Calculate growth metrics
-                growth_analysis['pop_growth'] = ((growth_analysis['recent_pop'] - growth_analysis['previous_pop']) / 
-                                                (growth_analysis['previous_pop'] + 1)) * 100
-                growth_analysis['track_growth'] = ((growth_analysis['recent_tracks'] - growth_analysis['previous_tracks']) / 
-                                                (growth_analysis['previous_tracks'] + 1)) * 100
-                growth_analysis['momentum_score'] = (growth_analysis['pop_growth'] * 0.6 + 
-                                                    growth_analysis['track_growth'] * 0.4)
-                
-                # Reset index to get artist names
-                growth_analysis = growth_analysis.reset_index()
-                
-                # Filter for meaningful results (at least 3 recent tracks)
-                growth_analysis = growth_analysis[growth_analysis['recent_tracks'] >= 3]
-                
-                # Categories
-                col_rise1, col_rise2 = st.columns(2)
-                
-                with col_rise1:
-                    # Fastest rising
-                    rising_stars = growth_analysis.nlargest(15, 'momentum_score')
-                    
-                    fig_rising = px.scatter(
-                        rising_stars,
-                        x='previous_pop',
-                        y='recent_pop',
-                        size='recent_tracks',
-                        color='momentum_score',
-                        hover_data=['artist_clean'],
-                        title='Rising Stars: Previous vs Current Popularity',
-                        labels={'previous_pop': f'Popularity ({cutoff_year-window_years}-{cutoff_year})',
-                            'recent_pop': f'Popularity ({cutoff_year}-{current_year})',
-                            'momentum_score': 'Momentum'},
-                        template='plotly_dark',
-                        color_continuous_scale='RdYlGn'
-                    )
-                    
-                    # Add diagonal line (no change)
-                    max_val = max(rising_stars['previous_pop'].max(), rising_stars['recent_pop'].max())
-                    fig_rising.add_shape(
-                        type='line',
-                        x0=0, y0=0, x1=max_val, y1=max_val,
-                        line=dict(color='gray', dash='dash', width=1)
-                    )
-                    
-                    fig_rising.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3'
-                    )
-                    
-                    st.plotly_chart(fig_rising, use_container_width=True)
-                
-                with col_rise2:
-                    # New entrants (artists with no previous tracks)
-                    new_artists = growth_analysis[growth_analysis['previous_tracks'] == 0].nlargest(10, 'recent_pop')
-                    
-                    if not new_artists.empty:
-                        fig_new = px.bar(
-                            new_artists,
-                            x='recent_pop',
-                            y='artist_clean',
-                            orientation='h',
-                            color='recent_tracks',
-                            title='Breakthrough Artists (New Entrants)',
-                            labels={'recent_pop': 'Current Popularity',
-                                'artist_clean': 'Artist',
-                                'recent_tracks': 'Track Count'},
-                            template='plotly_dark',
-                            color_continuous_scale='Viridis'
-                        )
-                        
-                        fig_new.update_layout(
-                            plot_bgcolor='#181818',
-                            paper_bgcolor='#181818',
-                            font_color='#B3B3B3',
-                            yaxis={'categoryorder':'total ascending'}
-                        )
-                        
-                        st.plotly_chart(fig_new, use_container_width=True)
-                    else:
-                        st.info("No breakthrough artists found in the selected time window.")
-                
-                    # Top movers summary
-                    st.markdown("### 📊 Movement Summary")
-                    
-                    col_sum1, col_sum2, col_sum3 = st.columns(3)
-                    
-                    with col_sum1:
-                        biggest_gainer = growth_analysis.nlargest(1, 'pop_growth')
-                        if not biggest_gainer.empty:
-                            st.metric(
-                                "🎯 Biggest Popularity Gain",
-                                biggest_gainer['artist_clean'].values[0][:25],
-                                f"+{biggest_gainer['pop_growth'].values[0]:.1f}%"
-                            )
-                    
-                    with col_sum2:
-                        most_productive = growth_analysis.nlargest(1, 'recent_tracks')
-                        if not most_productive.empty:
-                            st.metric(
-                                "🎵 Most Productive",
-                                most_productive['artist_clean'].values[0][:25],
-                                f"{most_productive['recent_tracks'].values[0]:.0f} tracks"
-                            )
-                    
-                    with col_sum3:
-                        highest_momentum = growth_analysis.nlargest(1, 'momentum_score')
-                        if not highest_momentum.empty:
-                            st.metric(
-                                "🚀 Highest Momentum",
-                                highest_momentum['artist_clean'].values[0][:25],
-                                f"Score: {highest_momentum['momentum_score'].values[0]:.1f}"
-                            )
-                                
-
-            # ---------------------------------------------------
-            # VIZ 16: SONG TITLE ANALYTICS
-            # ---------------------------------------------------
-            st.divider()
-
-            st.subheader("16. The Power of Words: Song Title Analysis")
-            st.info("**🔍 Strategic Questions:** Do shorter titles perform better? What words appear most in hit songs? Can title sentiment predict success?")
-
-            import re
-            from collections import Counter
-
-            title_analysis_type = st.radio(
-                "Analysis Type:",
-                ["Title Length vs Popularity", "Most Common Words", "Title Patterns"],
-                horizontal=True,
-                key="title_analysis"
-            )
-
-            # Add title length column
-            df_titles = df_filtered.copy()
-            df_titles['title_length'] = df_titles['name'].str.len()
-            df_titles['title_word_count'] = df_titles['name'].str.split().str.len()
-
-            if title_analysis_type == "Title Length vs Popularity":
-                col_title1, col_title2 = st.columns(2)
-                
-                with col_title1:
-                    # Character length analysis
-                    fig_title_len = px.scatter(
-                        df_titles.sample(min(5000, len(df_titles))),
-                        x='title_length',
-                        y='popularity',
-                        trendline='lowess',
-                        title='Title Length (Characters) vs Popularity',
-                        labels={'title_length': 'Title Length (chars)', 'popularity': 'Popularity'},
-                        opacity=0.6,
-                        template='plotly_dark'
-                    )
-                    fig_title_len.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3'
-                    )
-                    st.plotly_chart(fig_title_len, use_container_width=True)
-                
-                with col_title2:
-                    # Word count analysis
-                    word_bins = pd.cut(df_titles['title_word_count'], 
-                                    bins=[0, 1, 2, 3, 4, 10], 
-                                    labels=['1 word', '2 words', '3 words', '4 words', '5+ words'])
-                    word_popularity = df_titles.groupby(word_bins)['popularity'].mean().reset_index()
-                    
-                    fig_word_count = px.bar(
-                        word_popularity,
-                        x='title_word_count',
-                        y='popularity',
-                        title='Average Popularity by Title Word Count',
-                        labels={'title_word_count': 'Word Count', 'popularity': 'Average Popularity'},
-                        color='popularity',
-                        color_continuous_scale='Viridis',
-                        template='plotly_dark'
-                    )
-                    fig_word_count.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3'
-                    )
-                    st.plotly_chart(fig_word_count, use_container_width=True)
-
-            elif title_analysis_type == "Most Common Words":
-                # Extract and count words from titles
-                all_words = ' '.join(df_titles[df_titles['popularity'] > 50]['name'].str.lower()).split()
-                # Remove common stop words
-                stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'was', 'are', 'been'}
-                filtered_words = [word for word in all_words if word not in stop_words and len(word) > 2]
-                
-                word_freq = Counter(filtered_words)
-                top_words = pd.DataFrame(word_freq.most_common(20), columns=['word', 'count'])
-                
-                fig_words = px.bar(
-                    top_words,
-                    x='count',
-                    y='word',
-                    orientation='h',
-                    title='Most Common Words in Popular Songs (>50 popularity)',
-                    labels={'count': 'Frequency', 'word': 'Word'},
-                    color='count',
-                    color_continuous_scale='Viridis',
-                    template='plotly_dark'
-                )
-                fig_words.update_layout(
-                    plot_bgcolor='#181818',
-                    paper_bgcolor='#181818',
-                    font_color='#B3B3B3',
-                    height=600,
-                    yaxis={'categoryorder':'total ascending'}
-                )
-                st.plotly_chart(fig_words, use_container_width=True)
-
-            else:  # Title Patterns
-                # Check for patterns
-                df_titles['has_feat'] = df_titles['name'].str.contains('feat\.|ft\.|featuring', case=False, na=False)
-                df_titles['has_parentheses'] = df_titles['name'].str.contains('\(|\)', na=False)
-                df_titles['has_numbers'] = df_titles['name'].str.contains('\d', na=False)
-                df_titles['is_uppercase'] = df_titles['name'].str.isupper()
-                
-                patterns = {
-                    'Features': df_titles.groupby('has_feat')['popularity'].mean(),
-                    'Parentheses': df_titles.groupby('has_parentheses')['popularity'].mean(),
-                    'Numbers': df_titles.groupby('has_numbers')['popularity'].mean(),
-                    'All Caps': df_titles.groupby('is_uppercase')['popularity'].mean()
-                }
-                
-                pattern_results = []
-                for pattern, data in patterns.items():
-                    if len(data) == 2:
-                        pattern_results.append({
-                            'Pattern': pattern,
-                            'Without': data[False],
-                            'With': data[True],
-                            'Impact': data[True] - data[False]
-                        })
-                
-                pattern_df = pd.DataFrame(pattern_results)
-                
-                fig_patterns = px.bar(
-                    pattern_df,
-                    x=['Without', 'With'],
-                    y='Pattern',
-                    title='Impact of Title Patterns on Popularity',
-                    labels={'value': 'Average Popularity', 'variable': 'Pattern Type'},
-                    barmode='group',
-                    template='plotly_dark',
-                    color_discrete_sequence=['#B3B3B3', '#1DB954']
-                )
-                fig_patterns.update_layout(
-                    plot_bgcolor='#181818',
-                    paper_bgcolor='#181818',
-                    font_color='#B3B3B3'
-                )
-                st.plotly_chart(fig_patterns, use_container_width=True)
-                
-            # ---------------------------------------------------
-            # VIZ 17: COLLABORATION PATTERNS
-            # ---------------------------------------------------
-            st.divider()
-            
-            st.subheader("17. Collaboration Economy: The Power of Features")
-            st.info("**🔍 Strategic Questions:** Do collaborations boost popularity? Which artists collaborate most? What's the optimal number of artists per track?")
-
-            # Analyze collaboration patterns
-            df_collab = df_filtered.copy()
-            df_collab['artist_count'] = df_collab['artists'].str.count(',') + 1
-
-            collab_view = st.radio(
-                "View:",
-                ["Collaboration Impact", "Artist Networks", "Optimal Team Size"],
-                horizontal=True,
-                key="collab_view"
-            )
-
-            if collab_view == "Collaboration Impact":
-                # Solo vs Collaborations
-                df_collab['is_collab'] = df_collab['artist_count'] > 1
-                
-                col_collab1, col_collab2 = st.columns(2)
-                
-                with col_collab1:
-                    collab_stats = df_collab.groupby('is_collab')['popularity'].agg(['mean', 'std', 'count']).reset_index()
-                    collab_stats['is_collab'] = collab_stats['is_collab'].map({False: 'Solo', True: 'Collaboration'})
-                    
-                    fig_collab_impact = px.bar(
-                        collab_stats,
-                        x='is_collab',
-                        y='mean',
-                        error_y='std',
-                        title='Solo vs Collaboration Performance',
-                        labels={'is_collab': 'Type', 'mean': 'Average Popularity'},
-                        color='mean',
-                        color_continuous_scale='Viridis',
-                        template='plotly_dark'
-                    )
-                    fig_collab_impact.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3'
-                    )
-                    st.plotly_chart(fig_collab_impact, use_container_width=True)
-                
-                with col_collab2:
-                    # Trend over time
-                    collab_trend = df_collab[df_collab['year'] >= 1980].groupby('year')['is_collab'].mean() * 100
-                    
-                    fig_collab_trend = px.line(
-                        x=collab_trend.index,
-                        y=collab_trend.values,
-                        title='Collaboration Trend Over Time',
-                        labels={'x': 'Year', 'y': 'Collaboration %'},
-                        markers=True,
-                        template='plotly_dark'
-                    )
-                    fig_collab_trend.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3'
-                    )
-                    st.plotly_chart(fig_collab_trend, use_container_width=True)
-
-            elif collab_view == "Artist Networks":
-                # Most collaborative artists
-                collab_only = df_collab[df_collab['artist_count'] > 1].copy()
-                
-                if len(collab_only) > 0:
-                    # Count collaborations per artist (simplified)
-                    artist_collabs = []
-                    for artists_str in collab_only['artists'].head(1000):  # Sample for performance
-                        artists_list = [a.strip() for a in artists_str.replace('[','').replace(']','').replace("'",'').split(',')]
-                        for artist in artists_list:
-                            artist_collabs.append(artist)
-                    
-                    collab_counts = Counter(artist_collabs)
-                    top_collabs = pd.DataFrame(collab_counts.most_common(15), columns=['artist', 'collaborations'])
-                    
-                    fig_network = px.bar(
-                        top_collabs,
-                        x='collaborations',
-                        y='artist',
-                        orientation='h',
-                        title='Most Collaborative Artists',
-                        labels={'collaborations': 'Number of Collaborations', 'artist': 'Artist'},
-                        color='collaborations',
-                        color_continuous_scale='Viridis',
-                        template='plotly_dark'
-                    )
-                    fig_network.update_layout(
-                        plot_bgcolor='#181818',
-                        paper_bgcolor='#181818',
-                        font_color='#B3B3B3',
-                        height=500,
-                        yaxis={'categoryorder':'total ascending'}
-                    )
-                    st.plotly_chart(fig_network, use_container_width=True)
-
-            else:  # Optimal Team Size
-                # Popularity by number of artists
-                team_size = df_collab.groupby('artist_count')['popularity'].agg(['mean', 'count']).reset_index()
-                team_size = team_size[team_size['artist_count'] <= 5]  # Focus on reasonable team sizes
-                
-                fig_team = px.scatter(
-                    team_size,
-                    x='artist_count',
-                    y='mean',
-                    size='count',
-                    title='Optimal Team Size for Hit Songs',
-                    labels={'artist_count': 'Number of Artists', 'mean': 'Average Popularity', 'count': 'Sample Size'},
-                    template='plotly_dark',
-                    color='mean',
-                    color_continuous_scale='RdYlGn'
-                )
-                fig_team.update_layout(
-                    plot_bgcolor='#181818',
-                    paper_bgcolor='#181818',
-                    font_color='#B3B3B3'
-                )
-                st.plotly_chart(fig_team, use_container_width=True)
-                
-                # Show optimal
-                optimal = team_size.loc[team_size['mean'].idxmax()]
-                st.success(f"**Optimal Team Size:** {int(optimal['artist_count'])} artist(s) with average popularity of {optimal['mean']:.1f}")
-            
-            st.divider()
-
+                render_collab()
 
 
     # --------------------------------------------------------
@@ -5007,7 +3703,7 @@ if music_data is not None:
         ].mean()
 
         # 2. Criar o seletor de década
-        decade_options = sorted(df[df['decade'] >= 1950]['decade'].unique())
+        decade_options = sorted(df['decade'].unique())
         
         selected_decade = st.selectbox(
             "Select a Decade to Analyze:",
