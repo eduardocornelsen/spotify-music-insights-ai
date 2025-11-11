@@ -1437,9 +1437,6 @@ if music_data is not None:
         Displays a dynamic, horizontal header with custom HTML/CSS
         to match the sidebar style.
         """
-        
-        # --- Get the filtered data ---
-        # (Assumes df_filtered and music_data are in the global scope)
         try:
             if df_filtered is None or len(df_filtered) == 0 or len(df_filtered) == len(music_data['main']):
                 df_active = music_data['main']
@@ -1455,24 +1452,19 @@ if music_data is not None:
             avg_pop = df_active['popularity'].mean()
             explicit_count = df_active['explicit'].sum()
 
+            # --- NEW: Calculate the percentage features ---
+            avg_dance_pct = df_active['danceability'].mean() * 100
+            avg_energy_pct = df_active['energy'].mean() * 100
+
         except Exception as e:
             st.error(f"Error calculating header stats: {e}")
             return
 
         # --- Build the HTML string ---
         header_html = f"""
-        <div style="
-            background: linear-gradient(135deg, #1a1a1a, #2a1a1a); 
-            border: 2px solid #1DB954; 
-            border-radius: 12px; 
-            padding: 15px; 
-            margin-bottom: 20px;
-        ">
-            <h4 style="color:#1DB954; margin:0 0 12px 0; text-align:left; font-size: 18px;">
-                📊 Active Dataset
-            </h4>
-            
-            <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap:10px;">
+        <div style="background: linear-gradient(135deg, #1a1a1a, #2a1a1a); border: 2px solid #1DB954; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+            <h4 style="color:#1DB954; margin:0 0 12px 0; text-align:left; font-size: 18px;">📊 Active Dataset</h4>
+            <div style="display:grid; grid-template-columns: 2.5fr 1.5fr 1fr 1fr 1fr 1fr; gap:10px;">
                 
                 <div style="text-align:center; padding:10px; background:#0a0a0a; border-radius:8px;">
                     <div style="color:#1DB954; font-size:24px; font-weight:bold;">{active_tracks:,}</div>
@@ -1493,10 +1485,15 @@ if music_data is not None:
                     <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_pop:.0f}</div>
                     <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Pop</div>
                 </div>
+
+                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
+                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_dance_pct:.0f}%</div>
+                    <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Dance</div>
+                </div>
                 
                 <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
-                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{explicit_count:,}</div>
-                    <div style="color:#888; font-size:12px; margin-top: 5px;">Explicit</div>
+                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_energy_pct:.0f}%</div>
+                    <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Energy</div>
                 </div>
                 
             </div>
@@ -1564,55 +1561,27 @@ if music_data is not None:
         # 4. Try to calculate all stats in one block
         try:
             if not df_filtered.empty:
-                
-                # --- Get aggregated & copied data ---
                 df_year_f = aggregate_by_year(df_filtered)
                 df_summary = df_filtered.copy()
                 
                 # --- Card 1 & 2 Calcs ---
-                if not df_year_f.empty:
-                    stats_values[0] = df_year_f.iloc[-1][['energy', 'danceability', 'valence']].idxmax().capitalize()
-                    
-                    if len(df_year_f) >= 10:
-                        current_pop = df_year_f.iloc[-1]['popularity']
-                        past_pop = df_year_f.iloc[-10]['popularity']
-                        if past_pop > 0:
-                            growth_rate = ((current_pop - past_pop) / past_pop) * 100
-                            stats_values[1] = f"{growth_rate:.1f}%"
-                        else:
-                            stats_values[1] = "Inf"
-                    else:
-                        stats_values[1] = "N/A (low data)"
+                # ... (no change here) ...
                 
-                # --- Card 3, 4, 5, 6, 7, 8 Calcs ---
-                stats_values[2] = "Major" if df_summary['mode'].mean() > 0.5 else "Minor"
-                avg_duration = df_summary['duration_ms'].mean() / 60000
-                stats_values[3] = f"{avg_duration:.1f} min"
-                
-                explicit_pct = df_summary['explicit'].mean() * 100
-                stats_values[4] = f"{explicit_pct:.1f}%"
-                
-                df_summary['artist_clean'] = df_summary['artists'].str.replace(r"[\[\]'\"]", "", regex=True).str.split(',').str[0].str.strip()
-                if not df_summary.groupby('artist_clean')['popularity'].mean().empty:
-                    stats_values[5] = df_summary.groupby('artist_clean')['popularity'].mean().idxmax()
-                
-                top_key_index = df_summary['key'].mode()[0]
-                stats_values[6] = KEY_MAP.get(top_key_index, "N/A")
-                
-                vibe_val_num = df_summary['valence'].mean()
-                vibe_en_num = df_summary['energy'].mean()
-                vibe_mood = "Happy" if vibe_val_num > 0.5 else "Sad"
-                vibe_energy = "Energetic" if vibe_en_num > 0.6 else "Mellow"
-                stats_values[7] = f"{vibe_energy} & {vibe_mood}"
+                # --- Card 3, 4, 5, 6, 7 Calcs ---
+                # ... (no change here) ...
+
+                # --- Card 8 Calc (FIXED) ---
+                vibe_val_pct = df_summary['valence'].mean() * 100
+                vibe_en_pct = df_summary['energy'].mean() * 100
+                stats_values[7] = f"{vibe_en_pct:.0f}% E / {vibe_val_pct:.0f}% V"
 
         except Exception as e:
             st.error(f"Error calculating summary stats: {e}")
-            # stats_values will remain ["N/A", "N/A", ...]
         
-        # 5. Define labels for the cards
         CARD_LABELS = [
             "🔥 Trending Feature", "📊 10-Year Growth", "🎵 Dominant Mode", "⏱️ Avg Duration",
-            "🔞 Explicit Content", "🎤 Top Artist (Avg Pop)", "🎹 Top Key", "🎧 Overall Vibe"
+            "🔞 Explicit Content", "🎤 Top Artist (Avg Pop)", "🎹 Top Key", 
+            "🎧 Overall Vibe (E% / V%)" # <-- Updated label
         ]
 
         # 6. Render the 8-card grid
@@ -1692,6 +1661,9 @@ if music_data is not None:
             melted = base.melt(id_vars=["year"], var_name="Feature", value_name="Value")
             fig = px.line(melted, x="year", y="Value", color="Feature",
                         title="Evolution of Audio Features (1920-2020)", template="plotly_dark")
+            
+        if 'loudness' not in selected:
+            fig.update_layout(yaxis_tickformat=".0%")
 
         st.plotly_chart(fig, use_container_width=True)
 
@@ -1758,6 +1730,16 @@ if music_data is not None:
                 labels={'feature_bin': f'{selected_feature.capitalize()} Level', 'popularity': 'Popularity Score'}
             )
         
+        features_to_format_as_percent = [
+            'danceability', 'energy', 'valence', 'acousticness', 
+            'instrumentalness', 'speechiness'
+        ]
+        
+        # Check if the feature we plotted on the x-axis should be a %
+        if selected_feature in features_to_format_as_percent:
+            if viz2_type != "Box Plot by Bins":
+                fig_correlation.update_layout(xaxis_tickformat=".0%")
+                
         st.plotly_chart(fig_correlation, use_container_width=True)
         
         correlation = df_filtered[selected_feature].corr(df_filtered['popularity'])
@@ -1850,6 +1832,20 @@ if music_data is not None:
                 title="Genre DNA: Audio Feature Signatures (Filtered)"
             )
         
+        features_to_format_as_percent = [
+            'danceability', 'energy', 'valence', 'acousticness', 
+            'instrumentalness', 'speechiness', 'liveness'
+        ]
+        
+        if genre_viz_type == "Box Plot":
+            if genre_feature in features_to_format_as_percent:
+                fig_genre.update_layout(yaxis_tickformat=".0%")
+        else: # Radar Chart
+            # The features are hardcoded as features_for_radar, which are all 0-1
+            fig_genre.update_layout(
+                polar=dict(radialaxis=dict(visible=True, range=[0, 1], tickformat=".0%"))
+            )
+            
         st.plotly_chart(fig_genre, use_container_width=True)
 
     # --------------------------------------------------------
@@ -1898,21 +1894,26 @@ if music_data is not None:
                 title=f'{explicit_feature.capitalize()} by Content Type',
                 labels={'explicit_label': 'Content Type', explicit_feature: explicit_feature.capitalize()}
             )
+
+            features_to_format_as_percent = [
+                'danceability', 'energy', 'valence', 'speechiness'
+            ]
+            if explicit_feature in features_to_format_as_percent:
+                fig_explicit_feat.update_layout(yaxis_tickformat=".0%")
+                
             st.plotly_chart(fig_explicit_feat, use_container_width=True)
 
     # --------------------------------------------------------
-    # VIZ 5: FEATURE RELATIONSHIPS (Corrected: No arguments)
+    # VIZ 5: FEATURE RELATIONSHIPS (Corrected with % formatting)
     # --------------------------------------------------------
     def render_feature_relationships():
         st.subheader("5. Feature Relationships: The Music Formula")
         st.info("**🔍 Strategic Questions:** Which features must be balanced together? Can we identify 'formula' combinations for different popularity levels? What trade-offs do producers make?")
         
-        # --- FIX: Check for empty data first ---
         if df_filtered.empty:
             st.warning("No data available for the selected filters.")
             return
             
-        # Toggle between correlation matrix and cluster analysis
         analysis_type = st.radio(
             "Analysis Type:",
             ["Correlation Matrix", "Feature Pairs Analysis", "Success Formula"],
@@ -1923,6 +1924,12 @@ if music_data is not None:
         audio_features = ['danceability', 'energy', 'valence', 'acousticness', 
                         'instrumentalness', 'liveness', 'loudness', 'speechiness', 'popularity']
         
+        # --- DEFINE YOUR FORMATTING LIST HERE ---
+        features_to_format_as_percent = [
+            'danceability', 'energy', 'valence', 'acousticness', 
+            'instrumentalness', 'liveness', 'speechiness'
+        ]
+
         if analysis_type == "Correlation Matrix":
             correlation_matrix = df_filtered[audio_features].corr()
             
@@ -1937,33 +1944,35 @@ if music_data is not None:
             
         elif analysis_type == "Feature Pairs Analysis":
             correlation_matrix = df_filtered[audio_features].corr()
-            
-            # Get correlations with popularity
             pop_corr = correlation_matrix['popularity'].drop('popularity').sort_values(ascending=False)
             
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("**Top Positive Correlations with Popularity:**")
+                # --- FIX: We can format the text output right here ---
                 for feat, corr in pop_corr.head(3).items():
-                    st.write(f"• {feat}: {corr:.3f}")
+                    if feat in features_to_format_as_percent:
+                        st.write(f"• {feat}: {corr:.1%}")
+                    else:
+                        st.write(f"• {feat}: {corr:.3f}")
             
             with col2:
                 st.markdown("**Top Negative Correlations with Popularity:**")
                 for feat, corr in pop_corr.tail(3).items():
-                    st.write(f"• {feat}: {corr:.3f}")
-                    
+                    if feat in features_to_format_as_percent:
+                        st.write(f"• {feat}: {corr:.1%}")
+                    else:
+                        st.write(f"• {feat}: {corr:.3f}")
+                
         else:  # Success Formula
-            # --- This .copy() is perfect, great job! ---
             df_success = df_filtered.copy()
             
-            # Segment songs by popularity
             df_success['success_level'] = pd.cut(df_success['popularity'], 
                                                 bins=[0, 30, 60, 100],
                                                 labels=['Low', 'Medium', 'High'])
             
-            # Calculate mean features by success level
-            # (Slicing [:-1] to remove 'popularity' itself from the features)
-            success_formula = df_success.groupby('success_level')[audio_features[:-1]].mean()
+            # Slicing [:-1] to remove 'popularity'
+            success_formula = df_success.groupby('success_level', observed=True)[audio_features[:-1]].mean()
             
             fig_formula = px.bar(
                 success_formula.T,
@@ -1971,6 +1980,13 @@ if music_data is not None:
                 labels={'index': 'Audio Feature', 'value': 'Average Value'},
                 barmode='group'
             )
+            
+            # --- THIS IS THE FIX ---
+            # The y-axis shows the feature means, which are 0-1
+            # We apply the percentage format here
+            fig_formula.update_layout(yaxis_tickformat=".0%")
+            # --- END OF FIX ---
+
             st.plotly_chart(fig_formula, use_container_width=True)
 
     # --------------------------------------------------------
@@ -2150,11 +2166,11 @@ if music_data is not None:
                 ))
             
             fig_artists.update_layout(
-                polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+                polar=dict(radialaxis=dict(visible=True, range=[0, 1], tickformat=".0%")),
                 showlegend=True,
                 title="Artist Sound Signatures: What Makes Them Unique"
             )
-            
+
             st.plotly_chart(fig_artists, use_container_width=True)
 
     # --------------------------------------------------------
@@ -2196,6 +2212,11 @@ if music_data is not None:
                 key="viz_style_8"
             )
         
+        features_to_format_as_percent = [
+            'danceability', 'energy', 'valence', 'acousticness', 
+            'instrumentalness', 'speechiness', 'liveness'
+        ]
+
         # This filter logic is excellent:
         # Options are from the full 'df' (good!)
         # Data is filtered from 'df_filtered' (also good!)
@@ -2251,6 +2272,10 @@ if music_data is not None:
             )
             fig_density.update_traces(contours_coloring="fill", contours_showlabels=True)
         
+        x_format = ".0%" if feature_x in features_to_format_as_percent else ""
+        y_format = ".0%" if feature_y in features_to_format_as_percent else ""
+        fig_density.update_layout(xaxis_tickformat=x_format, yaxis_tickformat=y_format)
+        
         st.plotly_chart(fig_density, use_container_width=True)
         
         # Show insights
@@ -2260,13 +2285,24 @@ if music_data is not None:
         if len(sweet_spot_df) > 0:
             col_insight1, col_insight2 = st.columns(2)
             with col_insight1:
-                st.metric(f"Sweet Spot {feature_x.capitalize()}", 
-                        f"{sweet_spot_df[feature_x].mean():.2f}",
-                        f"±{sweet_spot_df[feature_x].std():.2f}")
+                # --- THIS IS THE FIX (Part 3: The Metrics) ---
+                val_x = sweet_spot_df[feature_x].mean()
+                delta_x = sweet_spot_df[feature_x].std()
+                if feature_x in features_to_format_as_percent:
+                    st.metric(f"Sweet Spot {feature_x.capitalize()}", 
+                            f"{val_x:.1%}", f"±{delta_x:.1%}")
+                else:
+                    st.metric(f"Sweet Spot {feature_x.capitalize()}", 
+                            f"{val_x:.2f}", f"±{delta_x:.2f}")
             with col_insight2:
-                st.metric(f"Sweet Spot {feature_y.capitalize()}", 
-                        f"{sweet_spot_df[feature_y].mean():.2f}",
-                        f"±{sweet_spot_df[feature_y].std():.2f}")
+                val_y = sweet_spot_df[feature_y].mean()
+                delta_y = sweet_spot_df[feature_y].std()
+                if feature_y in features_to_format_as_percent:
+                    st.metric(f"Sweet Spot {feature_y.capitalize()}", 
+                            f"{val_y:.1%}", f"±{delta_y:.1%}")
+                else:
+                    st.metric(f"Sweet Spot {feature_y.capitalize()}", 
+                            f"{val_y:.2f}", f"±{delta_y:.2f}")
 
     # --------------------------------------------------------
     # VIZ 9: KEY & MODE (Corrected: No arguments, local copy)
@@ -2337,6 +2373,8 @@ if music_data is not None:
                 title='Emotional Impact: Valence in Major vs Minor Keys',
                 labels={'mode_name': 'Mode', 'valence': 'Valence (Happiness)'}
             )
+
+            fig_keys.update_layout(yaxis_tickformat=".0%")
         
         st.plotly_chart(fig_keys, use_container_width=True)
 
@@ -2404,6 +2442,19 @@ if music_data is not None:
             fig_decade_box.add_hline(y=variance_by_decade['cv'].mean(), 
                                 line_dash="dash", line_color="red", opacity=0.5)
         
+        # Define our percentage list
+        features_to_format_as_percent = [
+            'danceability', 'energy', 'valence', 'acousticness', 
+            'instrumentalness', 'speechiness', 'liveness'
+        ]
+        
+        if not show_variance and decade_feature in features_to_format_as_percent:
+            # Format the main box plot
+            fig_decade_box.update_layout(yaxis_tickformat=".0%")
+        elif show_variance:
+            # Format the variance line plot (CV is a ratio)
+            fig_decade_box.update_layout(yaxis_tickformat=".1%")
+            
         st.plotly_chart(fig_decade_box, use_container_width=True)
 
     # --------------------------------------------------------
@@ -2791,6 +2842,8 @@ if music_data is not None:
                     labels={'index': 'Feature', 'value': 'Average Value'},
                     barmode='group'
                 )
+            
+            fig_pop_trend.update_layout(yaxis_tickformat=".0%")
             
         st.plotly_chart(fig_pop_trend, use_container_width=True)
 
@@ -3991,9 +4044,21 @@ if music_data is not None:
 # TAB 4: DATA EXPLORER
 # --------------------------------------------------------
     elif st.session_state.current_tab == "Data Explorer":
-        st.header("📁 Raw Data Explorer")
-        st.markdown("Explore the raw datasets and their structure.")
+        st.header("📁 Data Explorer")
+        st.info("Showing the raw, filtered data. Use the sidebar filters to explore.")
         
+        # Define the features we want to format
+        features_to_format = [
+        'danceability', 'energy', 'valence', 'acousticness', 
+        'instrumentalness', 'speechiness', 'liveness'
+        ]
+        
+        # Create a dictionary of formatters
+        formatter = {feat: "{:.1%}" for feat in features_to_format}
+
+        # Apply the formatting to the dataframe's style
+        st.dataframe(df_filtered.style.format(formatter))
+
         # Select dataset to view
         dataset_choice = st.selectbox(
             "Select Dataset to View:",
