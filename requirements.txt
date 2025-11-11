@@ -5,6 +5,7 @@ streamlit
 nbformat
 tabulate
 numpy
+wordcloud
 
 # Core LangChain e Google Gemini (o agente de execução)
 langchain
