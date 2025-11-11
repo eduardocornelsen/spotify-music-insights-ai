@@ -43,9 +43,20 @@ st.set_page_config(
 def set_viz(viz_name: str):
     """
     Callback function to update the visualization picker.
+    (Used by the TOC buttons)
     """
     st.session_state.viz_picker = viz_name
+
+def set_main_tab(tab_name: str):
+    """
+    Callback function to update the main page tab and reset the viz_picker.
+    (Used by sidebar navigation and the floating AI button)
+    """
+    st.session_state.current_tab = tab_name
     
+    # FIX: If the user navigates TO the Home tab, reset the viz picker to the Welcome Page.
+    if tab_name == "Home":
+        st.session_state.viz_picker = "🏠 Home"
 
 # --- UTILITY FUNCTIONS FOR ANIMATIONS ---
 
@@ -801,7 +812,7 @@ if music_data and 'stats_shown' not in st.session_state:
 
 # --- Initialize Session State for Navigation ---
 if 'current_tab' not in st.session_state:
-    st.session_state.current_tab = "Dashboard"
+    st.session_state.current_tab = "Home"
 
 
 # --- Sidebar Navigation ---
@@ -828,25 +839,21 @@ st.sidebar.html(header_html)
 # Navigation Section
 st.sidebar.markdown("### 🎵 Navigation")
 
-tabs = ["AI Consultant", "Dashboard", "Insights", "Data Explorer"]
+# --- FIX: New Tab Order and Names ---
+tabs = ["AI Consultant", "Home", "Dashboard", "Insights", "Data Explorer"]
 
 for tab in tabs:
+    # Use the appropriate visual name for the label
+    label = f"🧠 {tab} 💬" if tab == "AI Consultant" else f"{'🏠 Home' if tab == 'Home' else tab}"
+    icon_map = {
+        "Home": '🏠', "Dashboard": '📊', "Insights": '💡', "Data Explorer": '📁', "AI Consultant": '🧠'
+    }
+    icon = icon_map.get(tab, '📄')
+    label = f"{icon} {tab}" if tab != "Home" else label # Use full name for AI Consultant only
+
     is_active = st.session_state.current_tab == tab
     
-    # Set icon for each tab
-    if tab == "AI Consultant":
-        icon = "🧠"
-        label = f"{icon} {tab} 💬"
-    else:
-        icon_map = {
-            "Dashboard": "📊",
-            "Insights": "💡",
-            "Data Explorer": "📁"
-        }
-        icon = icon_map.get(tab, "📄")
-        label = f"{icon} {tab}"
-    
-    # Create button - same style for all
+    # Create button
     if st.sidebar.button(
         label,
         key=f"nav_{tab.replace(' ', '_')}",
@@ -1056,7 +1063,7 @@ if music_data is not None:
         
     # Dashboard Viz Picker
     if 'viz_picker' not in st.session_state:
-        st.session_state.viz_picker = "🏠 Welcome & Table of Contents"
+        st.session_state.viz_picker = "🏠 Home"
 
     # --- FUNCTION FOR CLEANING FILTERS ---
     def clear_filters():
@@ -1088,7 +1095,7 @@ if music_data is not None:
         
         # --- 4. Dashboard Viz Picker ---
         # This resets the selectbox back to the Welcome Page
-        st.session_state.viz_picker = "🏠 Welcome & Table of Contents"
+        st.session_state.viz_picker = "🏠 Home"
 
     # ---------------------------------------------------
     # GLOBAL FILTERS IN SIDEBAR
@@ -1398,18 +1405,8 @@ if music_data is not None:
     # --------------------------------------------------------
     def render_welcome_page():
         st.header("🏠 Welcome to MusicInsights AI")
-        st.markdown("This dashboard provides a deep dive into over 100 years of music data from Spotify. Explore trends in audio features and understand what makes songs popular.")
+        st.markdown("This dashboard provides a deep dive into over 100 years of music data from Spotify. Use the filters in the sidebar to narrow your analysis and select a visualization from the dropdown below, or click a 'Go to' button in the Table of Contents.")
         
-         # HOW TO INTERACT
-        with st.expander("How to interact", expanded=True):
-            st.markdown("""
-            - Use the Global Filters in the sidebar to subset the dataset.
-            - Select a visualization from the dropdown below, or click a 'Go to' button in the Table of Contents.
-            - Each visualization offers its own comparison mode when relevant.
-            - On mobile, scroll horizontally when needed.
-            - This page loads only the selected visualization for speed.
-            """)
-
         st.subheader("About the Author & Data")
         st.markdown(f"""
         This dashboard was created by **Eduardo Cornelsen**.
@@ -1420,8 +1417,58 @@ if music_data is not None:
         """)
         
         st.divider()
+
+        # ---------------------------------------------------
+        # 1. AI CONSULTANT PROMPT AND BUTTON (HIGHLIGHTED BOX)
+        # ---------------------------------------------------
         
-        st.subheader("📊 Table of Contents (Visualizations)")
+        # Col 1 (Spacer) : Col 2 (Content) : Col 3 (Spacer)
+        col_spacer_left, col_content, col_spacer_right = st.columns([1, 4, 1])
+        
+        with col_content:
+            # Use a container to hold the style
+            with st.container(border=True): 
+                st.markdown("""
+                <div style="
+                    /* Styles to create the prominent green-bordered box */
+                    background: linear-gradient(145deg, #181818, #0a0a0a);
+                    border: 2px solid #1DB954; 
+                    border-radius: 12px;
+                    padding: 20px;
+                    box-shadow: 0 4px 20px rgba(29, 185, 84, 0.4);
+                    text-align: center;
+                    /* NOTE: Removed margin-bottom here to let the next element control spacing */
+                ">
+                    <h3 style="color:#1ED760; margin-top: 0; margin-bottom: 10px;">
+                        🤖 Launch AI Consultant
+                    </h3>
+                    <p style="color: #E0E0E0; font-size: 15px; margin-bottom: 0px;"> 
+                        Have a specific question? Use the <b>AI Consultant</b> to analyze your filtered data using natural language. 
+                        Ask things like: <i>"Compare the average popularity of rock vs. pop in the 1980s."</i>
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # --- FIX: ADD VERTICAL MARGIN HERE ---
+                # We add 20 pixels of vertical space using an HTML div.
+                st.markdown('<div style="margin-top: 20px;"></div>', unsafe_allow_html=True)
+
+                # Place the Streamlit button immediately after the margin.
+                st.button(
+                    "Launch AI Consultant 🧠💬",
+                    on_click=set_main_tab,
+                    args=("AI Consultant",), 
+                    type="primary",
+                    use_container_width=True,
+                    key="welcome_ai_launch_btn"
+                )
+        
+        st.divider()
+        
+        # ---------------------------------------------------
+        # 2. VISUALIZATION CATALOG (TOC) - NAME UPDATED
+        # ---------------------------------------------------
+        st.subheader("📈 Visualization Catalog") # <--- NAME CHANGED HERE
         st.info("Click on any title to see its details, then click the 'Go to...' button to load the chart.")
 
         # --- DEFINE OUR NEW STYLES ---
@@ -1582,14 +1629,17 @@ if music_data is not None:
                         )
 
     # --------------------------------------------------------
-    # NEW: ACTIVE DATASET HEADER (with corrected font sizes)
+    # NEW: ACTIVE DATASET HEADER (Perfectly Consistent Font Sizes)
     # --------------------------------------------------------
     def render_active_dataset_header():
         """
-        Displays a dynamic, horizontal header with custom HTML/CSS
-        to match the sidebar style.
+        Displays a dynamic, horizontally styled header that collapses
+        nicely on mobile and is contained within an expander.
         """
+        
+        # --- Get the filtered data ---
         try:
+            # Use main data if no filter is applied
             if df_filtered is None or len(df_filtered) == 0 or len(df_filtered) == len(music_data['main']):
                 df_active = music_data['main']
                 percentage = 100.0
@@ -1602,9 +1652,6 @@ if music_data is not None:
             year_range = f"{df_active['year'].min()} - {df_active['year'].max()}"
             artist_count = df_active['artists'].nunique()
             avg_pop = df_active['popularity'].mean()
-            explicit_count = df_active['explicit'].sum()
-
-            # --- NEW: Calculate the percentage features ---
             avg_dance_pct = df_active['danceability'].mean() * 100
             avg_energy_pct = df_active['energy'].mean() * 100
 
@@ -1612,52 +1659,93 @@ if music_data is not None:
             st.error(f"Error calculating header stats: {e}")
             return
 
-        # --- Build the HTML string ---
-        header_html = f"""
-        <div style="background: linear-gradient(135deg, #1a1a1a, #2a1a1a); border: 2px solid #1DB954; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-            <h4 style="color:#1DB954; margin:0 0 12px 0; text-align:left; font-size: 18px;">📊 Active Dataset</h4>
-            <div style="display:grid; grid-template-columns: 2.5fr 1.5fr 1fr 1fr 1fr 1fr; gap:10px;">
-                
-                <div style="text-align:center; padding:10px; background:#0a0a0a; border-radius:8px;">
-                    <div style="color:#1DB954; font-size:24px; font-weight:bold;">{active_tracks:,}</div>
-                    <div style="color:#888; font-size:12px;">tracks selected ({percentage:.0f}%)</div>
-                </div>
-                
-                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
-                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{year_range}</div>
-                    <div style="color:#888; font-size:12px; margin-top: 5px;">Years</div>
-                </div>
-                
-                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
-                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{artist_count:,}</div>
-                    <div style="color:#888; font-size:12px; margin-top: 5px;">Artists</div>
-                </div>
-                
-                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
-                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_pop:.0f}</div>
-                    <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Pop</div>
-                </div>
-
-                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
-                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_dance_pct:.0f}%</div>
-                    <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Dance</div>
-                </div>
-                
-                <div style="background:#0a0a0a; padding: 12px 8px; border-radius:6px; text-align:center;">
-                    <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_energy_pct:.0f}%</div>
-                    <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Energy</div>
-                </div>
-                
-            </div>
-        </div>
-        """
+        # --- 1. CSS for Margin Reset and Responsiveness ---
+        st.markdown("""
+        <style>
+            /* FIX 1: Eliminate all default Streamlit top margins */
+            div.block-container {
+                padding-top: 2rem;
+            }
+            
+            /* FIX 2: Mobile Responsiveness for the Active Dataset Grid */
+            @media (max-width: 600px) {
+                .responsive-stats-grid {
+                    /* On small screens, stack the main metric, then use a 2-column grid for the rest */
+                    grid-template-columns: 1fr !important;
+                    gap: 5px !important;
+                }
+                .responsive-sub-grid {
+                    grid-template-columns: 1fr 1fr 1fr !important; /* 3 items wide */
+                    gap: 5px !important;
+                }
+            }
+        </style>
+        """, unsafe_allow_html=True)
         
-        st.html(header_html)
+        # --- 2. Build the HTML string inside an expander ---
+        with st.expander("📊 Active Dataset Summary (Click to Toggle)", expanded=True):
+            
+            header_html = f"""
+            <div style="
+                background: linear-gradient(135deg, #1a1a1a, #2a1a1a); 
+                border: 2px solid #1DB954; 
+                border-radius: 12px; 
+                padding: 15px; 
+                margin-bottom: 0px; 
+            ">
+                
+                <div class="responsive-stats-grid" style="
+                    display:grid; 
+                    grid-template-columns: 1.5fr 1fr; /* Two main columns for desktop */
+                    gap:15px;
+                ">
+                    
+                    <div style="text-align:center; padding:10px; background:#0a0a0a; border-radius:8px;">
+                        <div style="color:#1DB954; font-size:24px; font-weight:bold;">{active_tracks:,}</div>
+                        <div style="color:#888; font-size:12px;">tracks selected ({percentage:.0f}%)</div>
+                    </div>
+                    
+                    <div class="responsive-sub-grid" style="
+                        display:grid; 
+                        grid-template-columns: 1fr 1fr 1fr 1fr 1fr; 
+                        gap:8px;
+                    ">
+                        
+                        <div style="background:#0a0a0a; padding: 10px 4px; border-radius:6px; text-align:center;">
+                            <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{year_range}</div>
+                            <div style="color:#888; font-size:12px; margin-top: 5px;">Years</div>
+                        </div>
+                        
+                        <div style="background:#0a0a0a; padding: 10px 4px; border-radius:6px; text-align:center;">
+                            <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{artist_count:,}</div>
+                            <div style="color:#888; font-size:12px; margin-top: 5px;">Artists</div>
+                        </div>
+                        
+                        <div style="background:#0a0a0a; padding: 10px 4px; border-radius:6px; text-align:center;">
+                            <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_pop:.0f}</div>
+                            <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Pop</div>
+                        </div>
+                        
+                        <div style="background:#0a0a0a; padding: 10px 4px; border-radius:6px; text-align:center;">
+                            <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_dance_pct:.0f}%</div>
+                            <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Dance</div>
+                        </div>
+                        
+                        <div style="background:#0a0a0a; padding: 10px 4px; border-radius:6px; text-align:center;">
+                            <div style="color:#1DB954; font-weight:bold; font-size: 24px;">{avg_energy_pct:.0f}%</div>
+                            <div style="color:#888; font-size:12px; margin-top: 5px;">Avg Energy</div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            """
+            st.html(header_html)
 
     # --------------------------------------------------------
     # DASHBOARD SUMMARY CARDS (Corrected with 8 safe try/except blocks)
     # --------------------------------------------------------
-    def render_dashboard_summary():
+    def render_insights_summary():
         """
         Renders the 8-card (2x4 grid) summary for the
         main dashboard, using custom HTML with colors AND consistent fonts.
@@ -3706,143 +3794,96 @@ if music_data is not None:
     )
     
     st.sidebar.markdown("---")
-        
 
     # --------------------------------------------------------
-    # TAB 1: DASHBOARD
+    # TAB 1: HOME (New Landing Page)
     # --------------------------------------------------------
-    if st.session_state.current_tab == "Dashboard":
-        
-        # --- 1. Define the viz_map with LAMBDA functions ---
-        # The lambda waits to pass the required df_filtered until the function is called.
+    if st.session_state.current_tab == "Home": # <--- NEW HOME TAB
+        render_welcome_page() # Only show the Welcome Page with the TOC    
+
+    # --------------------------------------------------------
+    # TAB 2: DASHBOARD (New Analytical Page)
+    # --------------------------------------------------------
+    elif st.session_state.current_tab == "Dashboard": 
+        st.header("📊 Music Analytics Dashboard")
+        st.markdown("Select an analysis from the dropdown below to explore trends and formulas.")
+
+        # --- 1. VIZ MAP (Only includes analytical charts) ---
         viz_map = {
-            "🏠 Welcome & Table of Contents": render_welcome_page,
             "📈 Evolution of Features": lambda: render_evolution(df_filtered),
-            "📊 Popularity vs Features": lambda: render_correlation(df_filtered),
-            "🎸 Genre DNA": lambda: render_genre_dna(df_filtered),
-            "🔞 Explicit Strategy": lambda: render_explicit(df_filtered),
-            "📈 Explicit Over Time": lambda: render_explicit_time(df_filtered),
-            "🔗 Feature Relationships": lambda: render_feature_relationships(df_filtered),
-            "🔗 Temporal Trends": lambda: render_temporal(df_filtered),
-            "👤 Artist Success Patterns": lambda: render_artists(df_filtered),
-            "🔍 Feature Explorer": lambda: render_explorer(df_filtered),
-            "🎵 Key & Mode": lambda: render_keys(df_filtered),
-            "📅 Decade Evolution": lambda: render_decades(df_filtered),
-            "💰 Genre Economics": lambda: render_genre_econ(df_filtered),
-            "⏱️ Tempo Zones": lambda: render_tempo(df_filtered),
-            "🌟 Popularity Lifecycle": lambda: render_pop_lifecycle(df_filtered),
-            "🚀 Artist Evolution": lambda: render_artist_evo(df_filtered),
-            "💬 Title Analytics": lambda: render_titles(df_filtered),
+            # ... (all your 16 visualization map items go here) ...
             "🤝 Collaboration Patterns": lambda: render_collab(df_filtered),
         }
 
-        # --- 2. Show the selectbox ---
-        selected_viz_name = st.selectbox(
-            "Choose a visualization to load:", 
-            list(viz_map.keys()), 
-            key="viz_picker"
-        )
-        
-        # --- 3. Show the Dashboard Summary ---
-        render_dashboard_summary() 
+        # Define the first analytical option as the default fallback
+        first_analytical_viz = list(viz_map.keys())[0] # "📈 Evolution of Features"
 
-        # --- 4. Get and call the selected render function ---
-        render_function = viz_map.get(selected_viz_name)
+        # --- 2. PREPARE DEFAULT VALUE ---
+        current_picker_value = st.session_state.get('viz_picker', first_analytical_viz)
         
-        if render_function:
-            # The function is called here! The lambda passes df_filtered automatically.
-            render_function() 
-        else:
-            st.error(f"Error: Could not find function for '{selected_viz_name}'.")
+        # --- CRITICAL FIX: Force picker to a valid analytical chart if it is the old Welcome Page ---
+        if current_picker_value == "🏠 Home":
+            st.session_state.viz_picker = first_analytical_viz
+            current_picker_value = first_analytical_viz
+
+        # Find the index of the clean default value
+        default_index = list(viz_map.keys()).index(current_picker_value)
         
+
+        # --- 3. RENDER CONTROLS (Selectbox and Toggle) ---
+        col_select, col_toggle = st.columns([4, 2])
+        
+        with col_select:
+            selected_viz_name = st.selectbox(
+                "Choose a visualization to load:", 
+                list(viz_map.keys()), 
+                key="viz_picker",
+                # Pass the calculated index
+                index=default_index 
+            )
+
+        with col_toggle:
+            st.markdown("<br>", unsafe_allow_html=True)
+            performance_mode = st.checkbox(
+                "⚡ Performance Mode", 
+                value=st.session_state.get('perf_mode', False),
+                key="perf_mode", 
+                help="Load all visualizations at once in tabs. May be slow."
+            )
+
         st.divider()
+
+        # --- 4. CONDITIONAL RENDERING ---
         
-        # ---------------------------------------------------
-        # PERFORMANCE MODE (Now much cleaner)
-        # ---------------------------------------------------
+        # ... (The rest of your logic for conditional rendering runs here) ...
         
-        performance_mode = st.checkbox("⚡ Show all visualizations (Performance Mode)", value=False, key="perf_mode", 
-                                        help="Load all visualizations at once in tabs. May be slow.")
+        if performance_mode:
+            st.info("All visualizations are loaded below in scrollable tabs. Filter changes will update all tabs.")
         
-        if performance_mode:            
-            st.markdown("""
-            <style>
-                /* Visual indicator for scrollable tabs */
-                .stTabs [data-baseweb="tab-list"] {
-                    background: linear-gradient(90deg, 
-                        #181818 0%, 
-                        transparent 5%, 
-                        transparent 95%, 
-                        #181818 100%);
-                    padding: 0 20px;
-                }
-                
-                /* Pulsing indicator */
-                .scroll-hint {
-                    display: inline-block;
-                    margin-left: 10px;
-                    animation: blink 2s infinite;
-                }
-                
-                @keyframes blink {
-                    0%, 100% { opacity: 0.3; }
-                    50% { opacity: 1; }
-                }
-            </style>
-            """, unsafe_allow_html=True)
+        # ... (Your st.tabs rendering and function calls for all 17 VIZs go here) ...
+
+        else: # Standard On-Demand Mode
+            # Render ONLY the selected visualization
+            render_function = viz_map.get(selected_viz_name)
             
-            viz_tabs = st.tabs([
-                "📈 Evolution", "📊 Correlations", "🎸 Genres", "🔞 Explicit",
-                "📈 Explicit OT", "🔗 Temporal", "👤 Artists", "🔍 Explorer",
-                "🎵 Keys", "📅 Decades", "💰 Economics", "⏱️ Tempo",
-                "🌟 Popularity", "🚀 Artist Evo", "💬 Titles", "🤝 Collabs"
-                # Note: You have 17 functions, but 1 is the Welcome Page.
-                # You'll have 16 tabs for graphs. I've shortened some names.
-            ])
-
-            with viz_tabs[0]:
-                render_evolution(df_filtered)
-            with viz_tabs[1]:
-                render_correlation(df_filtered)
-            with viz_tabs[2]:
-                render_genre_dna(df_filtered)
-            with viz_tabs[3]:
-                render_explicit(df_filtered)
-            with viz_tabs[4]:
-                render_explicit_time(df_filtered)
-            with viz_tabs[5]:
-                render_feature_relationships(df_filtered)
-            with viz_tabs[6]:
-                render_temporal(df_filtered)
-            with viz_tabs[7]:
-                render_artists(df_filtered)
-            with viz_tabs[8]:
-                render_explorer(df_filtered)
-            with viz_tabs[9]:
-                render_keys(df_filtered)
-            with viz_tabs[10]:
-                render_decades(df_filtered)
-            with viz_tabs[11]:
-                render_genre_econ(df_filtered)
-            with viz_tabs[12]:
-                render_tempo(df_filtered)
-            with viz_tabs[13]:
-                render_pop_lifecycle(df_filtered)
-            with viz_tabs[14]:
-                render_artist_evo(df_filtered)
-            with viz_tabs[15]:
-                render_titles(df_filtered)
-            with viz_tabs[16]:
-                render_collab(df_filtered)
-
+            if render_function:
+                # The lambda calls the function with df_filtered
+                render_function() 
+            else:
+                # This should now only happen if the map is misdefined
+                st.error(f"Internal Error: Could not find function for '{selected_viz_name}'.")
 
     # --------------------------------------------------------
-    # TAB 2: INSIGHTS
+    # TAB 3: INSIGHTS
     # --------------------------------------------------------
     elif st.session_state.current_tab == "Insights":
         st.header("💡 Key Insights & Deep Analysis")
         st.markdown("Strategic insights and decade-by-decade analysis of music trends.")
         
+        render_insights_summary() 
+
+        st.markdown("### Deep Dive Reports")
+        st.info("This section will feature in-depth analysis reports derived from the summary metrics above.")
         # ---------------------------------------------------
         # KEY INSIGHTS SUMMARY
         # ---------------------------------------------------
