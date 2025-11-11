@@ -45,6 +45,7 @@ def set_viz(viz_name: str):
     Callback function to update the visualization picker.
     """
     st.session_state.viz_picker = viz_name
+    
 
 # --- UTILITY FUNCTIONS FOR ANIMATIONS ---
 
@@ -1017,21 +1018,101 @@ if music_data is not None:
     key_options = list(KEY_MAP.values())
 
     # ---------------------------------------------------
+    # --- 1. INITIALIZE ALL FILTER STATES ---
+    # This ensures all session_state keys exist on the first run.
+    # ---------------------------------------------------
+
+    # Main Filters
+    if 'global_year_slider' not in st.session_state:
+        st.session_state.global_year_slider = (int(df['year'].min()), int(df['year'].max()))
+    if 'global_popularity_filter' not in st.session_state:
+        st.session_state.global_popularity_filter = (0, 100)
+    if 'global_explicit_filter' not in st.session_state:
+        st.session_state.global_explicit_filter = "All"
+    if 'global_key_filter' not in st.session_state:
+        st.session_state.global_key_filter = key_options
+
+    # Audio Feature Filters
+    if 'f_dance' not in st.session_state:
+        st.session_state.f_dance = (0, 100)
+    if 'f_energy' not in st.session_state:
+        st.session_state.f_energy = (0, 100)
+    if 'f_valence' not in st.session_state:
+        st.session_state.f_valence = (0, 100)
+    if 'f_loud' not in st.session_state:
+        st.session_state.f_loud = (-60.0, 0.0)
+    if 'f_acoustic' not in st.session_state:
+        st.session_state.f_acoustic = (0, 100)
+    if 'f_instr' not in st.session_state:
+        st.session_state.f_instr = (0, 100)
+    if 'f_live' not in st.session_state:
+        st.session_state.f_live = (0, 100)
+    if 'f_speech' not in st.session_state:
+        st.session_state.f_speech = (0, 100)
+
+    # Comparison Mode
+    if 'compare_mode' not in st.session_state:
+        st.session_state.compare_mode = False
+        
+    # Dashboard Viz Picker
+    if 'viz_picker' not in st.session_state:
+        st.session_state.viz_picker = "🏠 Welcome & Table of Contents"
+
+    # --- FUNCTION FOR CLEANING FILTERS ---
+    def clear_filters():
+        """
+        Resets all session_state filter keys to their default values.
+        """
+        
+        # --- 1. Main Filters ---
+        # (Note: We use the actual min/max years here. 
+        #  You can also hardcode them, e.g., (1921, 2020))
+        st.session_state.global_year_slider = (int(df['year'].min()), int(df['year'].max()))
+        st.session_state.global_popularity_filter = (0, 100)
+        st.session_state.global_explicit_filter = "All"
+        # Assumes KEY_MAP is a global constant
+        st.session_state.global_key_filter = list(KEY_MAP.values()) 
+        
+        # --- 2. Audio Feature Filters ---
+        st.session_state.f_dance = (0, 100)
+        st.session_state.f_energy = (0, 100)
+        st.session_state.f_valence = (0, 100)
+        st.session_state.f_loud = (-60.0, 0.0)
+        st.session_state.f_acoustic = (0, 100)
+        st.session_state.f_instr = (0, 100)
+        st.session_state.f_live = (0, 100)
+        st.session_state.f_speech = (0, 100)
+        
+        # --- 3. Comparison Mode ---
+        st.session_state.compare_mode = False
+        
+        # --- 4. Dashboard Viz Picker ---
+        # This resets the selectbox back to the Welcome Page
+        st.session_state.viz_picker = "🏠 Welcome & Table of Contents"
+
+    # ---------------------------------------------------
     # GLOBAL FILTERS IN SIDEBAR
     # ---------------------------------------------------
     st.sidebar.markdown("### 🎛️ Global Filters")
     with st.sidebar.expander("Filter Options", expanded=True):
+
+        st.button(
+            "Clear All Filters 🔄",
+            on_click=clear_filters,
+            use_container_width=True
+        )
+        st.markdown("---")
         
-        # Get the list of decades
-        # --- FIX: Removed the '>= 1950' filter ---
-        decade_options = sorted(df['decade'].unique())
+        # Get the min and max year from the main dataframe
+        min_year = int(df['year'].min())
+        max_year = int(df['year'].max())
         
-        # Decade Range Filter
-        decade_range = st.select_slider(
-            "Decade Range:",
-            options=decade_options,
-            value=(decade_options[0], decade_options[-1]),
-            key="global_decade_slider"
+        # Year Range Filter
+        year_range = st.slider(
+            "Year Range:",
+            min_value=min_year,
+            max_value=max_year,
+            key="global_year_slider" # 'value' is gone!
         )
         
         # Popularity Range Filter
@@ -1039,49 +1120,91 @@ if music_data is not None:
             "Popularity Range:",
             min_value=0,
             max_value=100,
-            value=(0, 100),
-            key="global_popularity_filter"
+            key="global_popularity_filter" # 'value' is gone!
         )
         
         # Explicit Content Filter
         explicit_filter = st.radio(
             "Content Type:",
             options=["All", "Clean Only", "Explicit Only"],
-            key="global_explicit_filter"
+            key="global_explicit_filter" # 'index' is gone!
         )
         
         # Musical Key Filter
         key_filter_names = st.multiselect(
             "Filter by Key:",
             options=key_options,
-            default=key_options,
-            key="global_key_filter"
+            key="global_key_filter" # 'default' is gone!
         )
         
-        # COMPARISON MODE (inside filters)
-        st.markdown("---")
+        # ---------------------------------------------------
+        # COMPARISON MODE SECTION (Final, Clean Structure)
+        # ---------------------------------------------------
+        st.sidebar.markdown("---")
         compare_mode = st.checkbox("Enable Comparison Mode", key="compare_mode")
-        
-        if compare_mode:
-            compare_type = st.radio("Compare:", ["Decades", "Genres", "Artists"])
+
+        # --- Local function to render the comparison UI ---
+        # This keeps the code clean and isolated.
+        def _render_comparison_widgets():
             
+            # 1. Decade List 
+            decade_options_f = sorted(df_filtered['decade'].unique().tolist())
+            
+            # 2. Genre List 
+            try:
+                gframe_filtered = align_genre_frame(music_data["with_genres"], filters)
+                df_genres_agg = aggregate_by_genre(gframe_filtered)
+                genre_list_f = df_genres_agg.nlargest(20, 'popularity')['genres'].tolist()
+            except:
+                genre_list_f = []
+
+            # 3. Artist List
+            try:
+                df_artist_agg = aggregate_by_artist(df_filtered)
+                artist_list_f = df_artist_agg.nlargest(20, 'popularity')['artist_clean'].tolist()
+            except:
+                artist_list_f = []
+
+            # --- RENDER SELECTBOXES ---
+            compare_type = st.radio("Compare:", ["Decades", "Genres", "Artists"], key="compare_type")
+
             if compare_type == "Decades":
-                decade1 = st.selectbox("First Decade", decade_options, key="decade1")
-                decade2 = st.selectbox("Second Decade", decade_options, key="decade2")
-                st.session_state.compare_items = (decade1, decade2)
+                if not decade_options_f:
+                    st.info("Not enough data or decades in the current filter for comparison.")
+                else:
+                    decade1 = st.selectbox("First Decade", decade_options_f, index=0, key="decade1")
+                    decade2 = st.selectbox("Second Decade", decade_options_f, index=min(1, len(decade_options_f) - 1), key="decade2")
+                    st.session_state.compare_items = (decade1, decade2)
+            
             elif compare_type == "Genres":
-                genre_list = df_genres['genres'].head(20).tolist()
-                genre1 = st.selectbox("First Genre", genre_list, key="genre1")
-                genre2 = st.selectbox("Second Genre", genre_list, key="genre2")
-                st.session_state.compare_items = (genre1, genre2)
+                if not genre_list_f:
+                    st.info("No genres found in the current filter for comparison.")
+                else:
+                    genre1 = st.selectbox("First Genre", genre_list_f, index=0, key="genre1")
+                    genre2 = st.selectbox("Second Genre", genre_list_f, index=min(1, len(genre_list_f) - 1), key="genre2")
+                    st.session_state.compare_items = (genre1, genre2)
+            
             else:  # Artists
-                artist_list = df_artist['artists'].head(20).tolist()
-                artist1 = st.selectbox("First Artist", artist_list, key="artist1")
-                artist2 = st.selectbox("Second Artist", artist_list, key="artist2")
-                st.session_state.compare_items = (artist1, artist2)
+                if not artist_list_f:
+                    st.info("No artists found in the current filter for comparison.")
+                else:
+                    artist1 = st.selectbox("First Artist", artist_list_f, index=0, key="artist1")
+                    artist2 = st.selectbox("Second Artist", artist_list_f, index=min(1, len(artist_list_f) - 1), key="second_artist2")
+                    st.session_state.compare_items = (artist1, artist2)
+
+
+        # --- Main Rendering Logic ---
+        # Check if data and the checkbox are active
+        if compare_mode:
+            # Check if df_filtered is defined and not empty
+            if 'df_filtered' in globals() and not df_filtered.empty:
+                _render_comparison_widgets()
+            else:
+                # Data not ready OR filters returned no tracks
+                st.warning("Please wait for the initial data load to complete before using comparison mode.")
 
         # ---------------------------------------------------
-        # NEW: AUDIO FEATURE FILTERS (in 2 columns)
+        # NEW: AUDIO FEATURE FILTERS (in 2 columns, as percentages)
         # ---------------------------------------------------
         st.sidebar.markdown("### 🔬 Audio Feature Filters")
         with st.sidebar.expander("Filter by Audio Features", expanded=False):
@@ -1090,31 +1213,45 @@ if music_data is not None:
             
             with col1:
                 dance_range = st.slider(
-                    "Danceability:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_dance"
+                    "Danceability:",
+                    min_value=0, max_value=100, value=(0, 100), step=1,
+                    key="f_dance", format="%d%%"  # <-- FIX
                 )
                 energy_range = st.slider(
-                    "Energy:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_energy"
+                    "Energy:",
+                    min_value=0, max_value=100, value=(0, 100), step=1,
+                    key="f_energy", format="%d%%" # <-- FIX
                 )
                 valence_range = st.slider(
-                    "Valence:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_valence"
+                    "Valence:",
+                    min_value=0, max_value=100, value=(0, 100), step=1,
+                    key="f_valence", format="%d%%" # <-- FIX
                 )
-                # Loudness has a different range (dB)
+                # Loudness is NOT a percentage, so we leave it as-is
                 loudness_range = st.slider(
                     "Loudness (dB):", -60.0, 0.0, (-60.0, 0.0), 0.1, key="f_loud"
                 )
                 
             with col2:
                 acoustic_range = st.slider(
-                    "Acousticness:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_acoustic"
+                    "Acousticness:",
+                    min_value=0, max_value=100, value=(0, 100), step=1,
+                    key="f_acoustic", format="%d%%" # <-- FIX
                 )
                 instr_range = st.slider(
-                    "Instrumentalness:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_instr"
+                    "Instrumentalness:",
+                    min_value=0, max_value=100, value=(0, 100), step=1,
+                    key="f_instr", format="%d%%" # <-- FIX
                 )
                 live_range = st.slider(
-                    "Liveness:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_live"
+                    "Liveness:",
+                    min_value=0, max_value=100, value=(0, 100), step=1,
+                    key="f_live", format="%d%%" # <-- FIX
                 )
                 speech_range = st.slider(
-                    "Speechiness:", 0.0, 1.0, (0.0, 1.0), 0.01, key="f_speech"
+                    "Speechiness:",
+                    min_value=0, max_value=100, value=(0, 100), step=1,
+                    key="f_speech", format="%d%%" # <-- FIX
                 )
     
     selected_key_numbers = [k for k, v in KEY_MAP.items() if v in key_filter_names]
@@ -1122,8 +1259,8 @@ if music_data is not None:
     # --- Global filtering primitives ---
     @dataclass(frozen=True)
     class FilterState:
-        decade_start: int
-        decade_end: int
+        year_start: int
+        year_end: int
         pop_min: int
         pop_max: int
         explicit: str
@@ -1142,18 +1279,20 @@ if music_data is not None:
     @st.cache_data(show_spinner=False)
     def filter_tracks(df: pd.DataFrame, f: FilterState) -> pd.DataFrame:
         # These first two lines are from your existing code
-        q = df[(df["decade"] >= f.decade_start) & (df["decade"] <= f.decade_end)]
+        q = df[(df["year"] >= f.year_start) & (df["year"] <= f.year_end)]
         q = q[(q["popularity"] >= f.pop_min) & (q["popularity"] <= f.pop_max)]
         
-        # --- ADD THESE 8 NEW LINES ---
-        q = q[(q["danceability"] >= f.dance_range[0]) & (q["danceability"] <= f.dance_range[1])]
-        q = q[(q["energy"] >= f.energy_range[0]) & (q["energy"] <= f.energy_range[1])]
-        q = q[(q["valence"] >= f.valence_range[0]) & (q["valence"] <= f.valence_range[1])]
+        # --- FIX: Divide all percentage-based ranges by 100.0 ---
+        q = q[(q["danceability"] >= f.dance_range[0] / 100.0) & (q["danceability"] <= f.dance_range[1] / 100.0)]
+        q = q[(q["energy"] >= f.energy_range[0] / 100.0) & (q["energy"] <= f.energy_range[1] / 100.0)]
+        q = q[(q["valence"] >= f.valence_range[0] / 100.0) & (q["valence"] <= f.valence_range[1] / 100.0)]
+        q = q[(q["acousticness"] >= f.acoustic_range[0] / 100.0) & (q["acousticness"] <= f.acoustic_range[1] / 100.0)]
+        q = q[(q["instrumentalness"] >= f.instr_range[0] / 100.0) & (q["instrumentalness"] <= f.instr_range[1] / 100.0)]
+        q = q[(q["liveness"] >= f.live_range[0] / 100.0) & (q["liveness"] <= f.live_range[1] / 100.0)]
+        q = q[(q["speechiness"] >= f.speech_range[0] / 100.0) & (q["speechiness"] <= f.speech_range[1] / 100.0)]
+        
+        # --- Loudness is NOT divided by 100 ---
         q = q[(q["loudness"] >= f.loudness_range[0]) & (q["loudness"] <= f.loudness_range[1])]
-        q = q[(q["acousticness"] >= f.acoustic_range[0]) & (q["acousticness"] <= f.acoustic_range[1])]
-        q = q[(q["instrumentalness"] >= f.instr_range[0]) & (q["instrumentalness"] <= f.instr_range[1])]
-        q = q[(q["liveness"] >= f.live_range[0]) & (q["liveness"] <= f.live_range[1])]
-        q = q[(q["speechiness"] >= f.speech_range[0]) & (q["speechiness"] <= f.speech_range[1])]
 
         # These are from your existing code
         if f.explicit == "Clean Only":
@@ -1168,8 +1307,8 @@ if music_data is not None:
     # Build FilterState from sidebar widgets
     filters = FilterState(
         # Your existing 6 fields
-        decade_start=decade_range[0],
-        decade_end=decade_range[1],
+        year_start=year_range[0],
+        year_end=year_range[1],
         pop_min=popularity_range[0],
         pop_max=popularity_range[1],
         explicit=explicit_filter,
@@ -1187,6 +1326,11 @@ if music_data is not None:
     )
 
     df_filtered = filter_tracks(df, filters)
+
+    # --- CRITICAL FIX: Set the data ready flag ---
+    # This must be done AFTER data loading and filtering are complete.
+    if 'data_ready' not in st.session_state:
+        st.session_state.data_ready = True
 
     # --- Aggregators (respect current filters) ---
     @st.cache_data(show_spinner=False)
@@ -1226,8 +1370,8 @@ if music_data is not None:
     def align_genre_frame(df_w_genres: pd.DataFrame, f: FilterState) -> pd.DataFrame:
         g = df_w_genres.copy()
         # Apply what we can (may not have explicit/key in this table)
-        if "decade" in g.columns:
-            g = g[(g["decade"] >= f.decade_start) & (g["decade"] <= f.decade_end)]
+        if "year" in g.columns:
+            g = g[(g["year"] >= f.year_start) & (g["year"] <= f.year_end)]
         if "popularity" in g.columns:
             g = g[(g["popularity"] >= f.pop_min) & (g["popularity"] <= f.pop_max)]
         if "explicit" in g.columns and f.explicit != "All":
@@ -1254,8 +1398,18 @@ if music_data is not None:
     # --------------------------------------------------------
     def render_welcome_page():
         st.header("🏠 Welcome to MusicInsights AI")
-        st.markdown("This dashboard provides a deep dive into over 100 years of music data from Spotify. Use the filters in the sidebar to narrow your analysis and select a visualization from the dropdown below, or click a 'Go to' button in the Table of Contents.")
+        st.markdown("This dashboard provides a deep dive into over 100 years of music data from Spotify. Explore trends in audio features and understand what makes songs popular.")
         
+         # HOW TO INTERACT
+        with st.expander("How to interact", expanded=True):
+            st.markdown("""
+            - Use the Global Filters in the sidebar to subset the dataset.
+            - Select a visualization from the dropdown below, or click a 'Go to' button in the Table of Contents.
+            - Each visualization offers its own comparison mode when relevant.
+            - On mobile, scroll horizontally when needed.
+            - This page loads only the selected visualization for speed.
+            """)
+
         st.subheader("About the Author & Data")
         st.markdown(f"""
         This dashboard was created by **Eduardo Cornelsen**.
@@ -1427,8 +1581,6 @@ if music_data is not None:
                             use_container_width=True
                         )
 
-
-
     # --------------------------------------------------------
     # NEW: ACTIVE DATASET HEADER (with corrected font sizes)
     # --------------------------------------------------------
@@ -1503,7 +1655,7 @@ if music_data is not None:
         st.html(header_html)
 
     # --------------------------------------------------------
-    # DASHBOARD SUMMARY CARDS (Corrected with Colors + Font Size)
+    # DASHBOARD SUMMARY CARDS (Corrected with 8 safe try/except blocks)
     # --------------------------------------------------------
     def render_dashboard_summary():
         """
@@ -1513,7 +1665,6 @@ if music_data is not None:
         st.subheader("📈 Dashboard Summary (Filtered)")
 
         # 1. Define the HTML template for a single metric box.
-        #    This new template accepts background and border colors.
         METRIC_BOX_HTML = """
         <div style="
             background: {bg_color}; 
@@ -1535,55 +1686,99 @@ if music_data is not None:
         </div>
         """
         
-        # 2. Define our color palettes (mimicking st.info, st.success, etc.)
+        # 2. Define our color palettes
         COLORS = {
             "info": {"bg": "rgba(0, 104, 225, 0.1)", "border": "rgba(0, 104, 225, 0.5)"},
             "success": {"bg": "rgba(9, 171, 59, 0.1)", "border": "rgba(9, 171, 59, 0.5)"},
             "warning": {"bg": "rgba(255, 193, 7, 0.1)", "border": "rgba(255, 193, 7, 0.5)"},
             "error": {"bg": "rgba(255, 4, 4, 0.1)", "border": "rgba(255, 4, 4, 0.5)"}
         }
-        # Let's map your original card colors
         CARD_COLORS = [
-            COLORS["info"],    # Card 1: Trending
-            COLORS["success"], # Card 2: Growth
-            COLORS["warning"], # Card 3: Mode
-            COLORS["error"],   # Card 4: Duration
-            COLORS["error"],   # Card 5: Explicit
-            COLORS["warning"], # Card 6: Artist
-            COLORS["success"], # Card 7: Key
-            COLORS["info"]     # Card 8: Vibe
+            COLORS["info"], COLORS["success"], COLORS["warning"], COLORS["error"],
+            COLORS["error"], COLORS["warning"], COLORS["success"], COLORS["info"]
         ]
-
-
-        # 3. Set default values for all 8 stats
-        stats_values = ["N/A"] * 8
         
-        # 4. Try to calculate all stats in one block
-        try:
-            if not df_filtered.empty:
-                df_year_f = aggregate_by_year(df_filtered)
-                df_summary = df_filtered.copy()
-                
-                # --- Card 1 & 2 Calcs ---
-                # ... (no change here) ...
-                
-                # --- Card 3, 4, 5, 6, 7 Calcs ---
-                # ... (no change here) ...
-
-                # --- Card 8 Calc (FIXED) ---
-                vibe_val_pct = df_summary['valence'].mean() * 100
-                vibe_en_pct = df_summary['energy'].mean() * 100
-                stats_values[7] = f"{vibe_en_pct:.0f}% E / {vibe_val_pct:.0f}% V"
-
-        except Exception as e:
-            st.error(f"Error calculating summary stats: {e}")
-        
+        # 3. Define labels
         CARD_LABELS = [
             "🔥 Trending Feature", "📊 10-Year Growth", "🎵 Dominant Mode", "⏱️ Avg Duration",
-            "🔞 Explicit Content", "🎤 Top Artist (Avg Pop)", "🎹 Top Key", 
-            "🎧 Overall Vibe (E% / V%)" # <-- Updated label
+            "🔞 Explicit Content", "🎤 Top Artist (Avg Pop)", "🎹 Top Key", "🎧 Overall Vibe"
         ]
+        
+        # 4. Set default values for all 8 stats
+        stats_values = ["N/A"] * 8
+        
+        # 5. Run each calculation in its own safe try/except block
+        if not df_filtered.empty:
+            df_year_f = aggregate_by_year(df_filtered)
+            df_summary = df_filtered.copy()
 
+            # --- Card 1: Trending Feature ---
+            try:
+                if not df_year_f.empty:
+                    stats_values[0] = df_year_f.iloc[-1][['energy', 'danceability', 'valence']].idxmax().capitalize()
+            except:
+                pass # Fails silently, leaves "N/A"
+
+            # --- Card 2: 10-Year Growth ---
+            try:
+                if len(df_year_f) >= 10:
+                    current_pop = df_year_f.iloc[-1]['popularity']
+                    past_pop = df_year_f.iloc[-10]['popularity']
+                    if past_pop > 0:
+                        growth_rate = ((current_pop - past_pop) / past_pop) * 100
+                        stats_values[1] = f"{growth_rate:.1f}%"
+                    else:
+                        stats_values[1] = "Inf"
+                else:
+                    stats_values[1] = "N/A (low data)"
+            except:
+                pass
+
+            # --- Card 3: Dominant Mode ---
+            try:
+                stats_values[2] = "Major" if df_summary['mode'].mean() > 0.5 else "Minor"
+            except:
+                pass
+                
+            # --- Card 4: Avg Duration ---
+            try:
+                avg_duration = df_summary['duration_ms'].mean() / 60000
+                stats_values[3] = f"{avg_duration:.1f} min"
+            except:
+                pass
+
+            # --- Card 5: Explicit Content % ---
+            try:
+                explicit_pct = df_summary['explicit'].mean() * 100
+                stats_values[4] = f"{explicit_pct:.1f}%"
+            except:
+                pass
+                
+            # --- Card 6: Top Artist ---
+            try:
+                df_summary['artist_clean'] = df_summary['artists'].str.replace(r"[\[\]'\"]", "", regex=True).str.split(',').str[0].str.strip()
+                if not df_summary.groupby('artist_clean')['popularity'].mean().empty:
+                    stats_values[5] = df_summary.groupby('artist_clean')['popularity'].mean().idxmax()
+            except:
+                pass # This was the most likely error source
+                
+            # --- Card 7: Top Musical Key ---
+            try:
+                top_key_index = df_summary['key'].mode()[0]
+                stats_values[6] = KEY_MAP.get(top_key_index, "N/A")
+            except:
+                pass
+
+            # --- Card 8: Overall Vibe ---
+            try:
+                vibe_val_num = df_summary['valence'].mean()
+                vibe_en_num = df_summary['energy'].mean()
+                vibe_mood = "Happy" if vibe_val_num > 0.5 else "Sad"
+                vibe_energy = "Energetic" if vibe_en_num > 0.6 else "Mellow"
+                stats_values[7] = f"{vibe_energy} & {vibe_mood}"
+            except:
+                pass
+        
         # 6. Render the 8-card grid
         cols_row1 = st.columns(4)
         cols_row2 = st.columns(4)
@@ -1598,8 +1793,6 @@ if music_data is not None:
                     border_color=CARD_COLORS[i]["border"]
                 ))
 
-        st.divider()
-
         
     # ========================================================
     #
@@ -1610,14 +1803,14 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 1: EVOLUTION (Corrected: No arguments)
     # --------------------------------------------------------
-    def render_evolution():
+    def render_evolution(df_filtered: pd.DataFrame):
         st.subheader("1. Evolution of ALL Audio Features Over Decades")
 
         # --- FIX: Get data inside the function ---
         # This function can "see" the 'df_filtered' and 'aggregate_by_year'
         # variables from your main script.
         try:
-            df_year_f = aggregate_by_year(df_filtered)
+            df_year_f = aggregate_by_year(df_filtered) 
         except Exception as e:
             st.error(f"Error during aggregation: {e}")
             return
@@ -1671,9 +1864,13 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 2: CORRELATION (Corrected: No arguments)
     # --------------------------------------------------------
-    def render_correlation():
+    def render_correlation(df_filtered: pd.DataFrame):
         st.subheader("2. Correlation Analysis: Popularity vs Audio Features")
         st.info("**🔍 Key Questions:** Which audio feature best predicts commercial success? ...")
+        
+        if df_filtered.empty:
+            st.warning("No data available for the selected filters.")
+            return
         
         col_viz2_1, col_viz2_2, col_viz2_3 = st.columns(3)
         
@@ -1751,7 +1948,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # We remove 'df_filtered' from the arguments, because this function
     # will now get the filtered data itself, just like you wanted.
-    def render_genre_dna(): 
+    def render_genre_dna(df_filtered: pd.DataFrame):
         st.subheader("3. Genre DNA: Audio Feature Signatures")
         st.info("**🔍 Strategic Questions:** What is the unique 'DNA' of each genre? ...")
 
@@ -1760,8 +1957,9 @@ if music_data is not None:
         #    This assumes 'df_genres' and 'filters' are defined in the global scope
         #    before this function is called (which they are in your app).
         try:
-            df_genres_f = align_genre_frame(df_genres, filters)
-            df_genre_agg = aggregate_by_genre(df_genres_f)
+        # Use global helpers, but ensure df_filtered is present
+            gframe_filtered = align_genre_frame(music_data["with_genres"], filters)
+            df_genre_agg = aggregate_by_genre(gframe_filtered)
         except Exception as e:
             st.error(f"Error aggregating genre data: {e}")
             return
@@ -1851,7 +2049,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 4: EXPLICIT STRATEGY (Corrected: No arguments, local copy)
     # --------------------------------------------------------
-    def render_explicit():
+    def render_explicit(df_filtered: pd.DataFrame):
         st.subheader("4. Explicit Content: Commercial Strategy Analysis")
         st.info("**🔍 Strategic Questions:** Is explicit content a successful commercial strategy? Which genres benefit most from explicit content? Should artists release both clean and explicit versions?")
         
@@ -1906,7 +2104,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 5: FEATURE RELATIONSHIPS (Corrected with % formatting)
     # --------------------------------------------------------
-    def render_feature_relationships():
+    def render_feature_relationships(df_filtered: pd.DataFrame):
         st.subheader("5. Feature Relationships: The Music Formula")
         st.info("**🔍 Strategic Questions:** Which features must be balanced together? Can we identify 'formula' combinations for different popularity levels? What trade-offs do producers make?")
         
@@ -1992,16 +2190,19 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 6: TEMPORAL TRENDS (Corrected: No arguments, local copy)
     # --------------------------------------------------------
-    def render_temporal():
+    def render_temporal(df_filtered: pd.DataFrame):
         st.subheader("6. Temporal Trends: Predicting the Future of Music")
         st.info("**🔍 Strategic Questions:** Can we predict the next trend? Are songs converging to a standard formula? What features are becoming obsolete?")
         
         # --- FIX: Get data inside the function and make a local copy ---
         try:
-            # Assumes 'aggregate_by_year' and 'df_filtered' are in global scope
             df_year_f = aggregate_by_year(df_filtered).copy()
         except Exception as e:
             st.error(f"Error during aggregation: {e}")
+            return
+
+        if df_year_f.empty:
+            st.warning("No data available for the selected filters.")
             return
 
         # --- FIX: Check for empty data ---
@@ -2060,19 +2261,17 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 7: ARTIST SUCCESS PATTERNS (Corrected: No arguments)
     # --------------------------------------------------------
-    def render_artists():
+    def render_artists(df_filtered: pd.DataFrame):
         st.subheader("7. Artist Success Patterns: One-Hit Wonder vs Consistency")
         st.info("**🔍 Strategic Questions:** What separates consistent hitmakers from one-hit wonders? Is it better to release many average songs or few excellent ones? How do successful artists maintain their sound signature?")
         
         # --- FIX: Get DYNAMICALLY FILTERED artist data first ---
         try:
-            # Assumes 'aggregate_by_artist' and 'df_filtered' are in global scope
             df_artist_f = aggregate_by_artist(df_filtered)
         except Exception as e:
             st.error(f"Error during artist aggregation: {e}")
             return
 
-        # Check if filters returned any data
         if df_artist_f.empty:
             st.warning("No artist data available for the selected filters.")
             return
@@ -2176,7 +2375,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 8: FEATURE EXPLORER (Corrected: No arguments)
     # --------------------------------------------------------
-    def render_explorer():
+    def render_explorer(df_filtered: pd.DataFrame):
         st.subheader("8. Feature Interaction Explorer: Finding the Sweet Spot")
         st.info("**🔍 Strategic Questions:** What feature combinations create viral hits? Are there 'dead zones' to avoid? How do different eras prefer different feature combinations?")
         
@@ -2307,7 +2506,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 9: KEY & MODE (Corrected: No arguments, local copy)
     # --------------------------------------------------------
-    def render_keys():
+    def render_keys(df_filtered: pd.DataFrame):
         st.subheader("9. Musical Key & Mode: The Emotional Blueprint")
         st.info("**🔍 Strategic Questions:** Do certain keys resonate better with audiences? Should artists favor major (happy) or minor (sad) keys? Is there a 'golden key' for hits?")
         
@@ -2381,7 +2580,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 10: DECADE EVOLUTION (Corrected: No arguments, safe checks)
     # --------------------------------------------------------
-    def render_decades():
+    def render_decades(df_filtered: pd.DataFrame):
         st.subheader("10. Decade Evolution: The Sound of Generations")
         st.info("**🔍 Strategic Questions:** How homogeneous is modern music? Which decades had the most experimental music? Can we identify the 'signature sound' of each generation?")
         
@@ -2460,29 +2659,22 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 11: GENRE ECONOMICS (Corrected: No arguments, fully dynamic)
     # --------------------------------------------------------
-    def render_genre_econ():
+    def render_genre_econ(df_filtered: pd.DataFrame):
         st.subheader("11. Genre Economics: Market Share & Commercial Viability")
         st.info("**🔍 Strategic Questions:** Which genres dominate the market? Are niche genres more loyal? Where should new artists position themselves for maximum impact?")
         
         # --- FIX: Get DYNAMICALLY FILTERED data ONCE at the top ---
         try:
-            # Assumes 'align_genre_frame', 'aggregate_by_genre', 
-            # 'music_data', and 'filters' are in global scope
-            
-            # gframe_filtered is the filtered *track list* with genres
+            # Use global helpers, but rely on df_filtered to derive data
             gframe_filtered = align_genre_frame(music_data["with_genres"], filters)
-            # df_genres_f is the *aggregated* data (mean values per genre)
             df_genres_f = aggregate_by_genre(gframe_filtered) 
-            
         except Exception as e:
             st.error(f"Error aggregating genre data: {e}")
             return
 
-        # Check if filters returned any data
         if gframe_filtered.empty or df_genres_f.empty:
             st.warning("No genre data available for the selected filters.")
             return
-        # --- END OF FIX ---
             
         genre_view = st.radio(
             "View:",
@@ -2552,7 +2744,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 12: TEMPO ZONES (Corrected: No arguments, safe checks)
     # --------------------------------------------------------
-    def render_tempo():
+    def render_tempo(df_filtered: pd.DataFrame):
         st.subheader("12. The Tempo Formula: BPM Success Zones")
         st.info("**🔍 Strategic Questions:** Is there an optimal BPM for chart success? Do different decades prefer different tempos? Should producers target specific BPM ranges?")
         
@@ -2635,7 +2827,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 13: EXPLICIT OVER TIME (Corrected: No arguments, fully dynamic)
     # --------------------------------------------------------
-    def render_explicit_time():
+    def render_explicit_time(df_filtered: pd.DataFrame):
         st.subheader("13. Explicit Content Evolution: Cultural Shifts & Commercial Impact")
         st.info("**🔍 Strategic Questions:** When did explicit content become mainstream? Which genres pioneered explicit content? Is the trend reversing or accelerating?")
         
@@ -2741,7 +2933,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 14: POPULARITY LIFECYCLE (Corrected: No arguments, fully dynamic)
     # --------------------------------------------------------
-    def render_pop_lifecycle():
+    def render_pop_lifecycle(df_filtered: pd.DataFrame):
         st.subheader("14. The Popularity Lifecycle: Understanding Music Relevance")
         st.info("**🔍 Strategic Questions:** How long do songs stay relevant? Are older songs experiencing a streaming renaissance? What makes a song 'timeless'?")
         
@@ -2844,13 +3036,13 @@ if music_data is not None:
                 )
             
             fig_pop_trend.update_layout(yaxis_tickformat=".0%")
-            
+
         st.plotly_chart(fig_pop_trend, use_container_width=True)
 
     # --------------------------------------------------------
     # VIZ 15: ARTIST EVOLUTION (Corrected: No arguments, empty check)
     # --------------------------------------------------------
-    def render_artist_evo():
+    def render_artist_evo(df_filtered: pd.DataFrame):
         st.subheader("15. Artist Evolution: The Rise and Fall of Music Icons")
         st.info("**🔍 Strategic Questions:** Which artists dominated different eras? How has artist longevity changed? Can we identify 'comeback' artists or one-era wonders?")
 
@@ -3231,7 +3423,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 16: TITLE ANALYTICS (Corrected: No arguments, safe checks)
     # --------------------------------------------------------
-    def render_titles():
+    def render_titles(df_filtered: pd.DataFrame):
         st.subheader("16. The Power of Words: Song Title Analysis")
         st.info("**🔍 Strategic Questions:** Do shorter titles perform better? What words appear most in hit songs? Can title sentiment predict success?")
 
@@ -3378,7 +3570,7 @@ if music_data is not None:
     # --------------------------------------------------------
     # VIZ 17: COLLABORATION PATTERNS (Corrected: No arguments)
     # --------------------------------------------------------
-    def render_collab():
+    def render_collab(df_filtered: pd.DataFrame):
         st.subheader("17. Collaboration Economy: The Power of Features")
         st.info("**🔍 Strategic Questions:** Do collaborations boost popularity? Which artists collaborate most? What's the optimal number of artists per track?")
 
@@ -3520,74 +3712,49 @@ if music_data is not None:
     # TAB 1: DASHBOARD
     # --------------------------------------------------------
     if st.session_state.current_tab == "Dashboard":
-        render_dashboard_summary()
         
-        st.divider()
-        
-        # --- END OF SUMMARY SECTION ---
-
-        st.header("📊 Music Analytics Dashboard")
-        st.markdown("Explore trends in audio features and understand what makes songs popular.")
-        
-        # --- FIX ---
-        # 1. Call your aggregator on the filtered data
-        #    This makes the year-based cards dynamic
-        df_year_f = aggregate_by_year(df_filtered)
-        
-               
-        st.divider()
-
-        # HOW TO INTERACT
-        with st.expander("How to interact", expanded=True):
-            st.markdown("""
-            - Use the Global Filters in the sidebar to subset the dataset.
-            - Each visualization offers its own comparison mode when relevant.
-            - On mobile, scroll horizontally when needed.
-            - This page loads only the selected visualization for speed.
-            """)
-        
-        # ---------------------------------------------------
-        # NEW: Main Visualization Controller
-        # ---------------------------------------------------
-        
-        # Create the map of all visualizations
-        # NEW: Added "Welcome" page as the first option
+        # --- 1. Define the viz_map with LAMBDA functions ---
+        # The lambda waits to pass the required df_filtered until the function is called.
         viz_map = {
             "🏠 Welcome & Table of Contents": render_welcome_page,
-            "📈 Evolution of Features": render_evolution,
-            "📊 Popularity vs Features": render_correlation,
-            "🎸 Genre DNA": render_genre_dna,
-            "🔞 Explicit Strategy": render_explicit,
-            "📈 Explicit Over Time": render_explicit_time,
-            "🔗 Temporal Trends": render_temporal,
-            "👤 Artist Success Patterns": render_artists,
-            "🔍 Feature Explorer": render_explorer,
-            "🎵 Key & Mode": render_keys,
-            "📅 Decade Evolution": render_decades,
-            "💰 Genre Economics": render_genre_econ,
-            "⏱️ Tempo Zones": render_tempo,
-            "🌟 Popularity Lifecycle": render_pop_lifecycle,
-            "🚀 Artist Evolution": render_artist_evo,
-            "💬 Title Analytics": render_titles,
-            "🤝 Collaboration Patterns": render_collab,
+            "📈 Evolution of Features": lambda: render_evolution(df_filtered),
+            "📊 Popularity vs Features": lambda: render_correlation(df_filtered),
+            "🎸 Genre DNA": lambda: render_genre_dna(df_filtered),
+            "🔞 Explicit Strategy": lambda: render_explicit(df_filtered),
+            "📈 Explicit Over Time": lambda: render_explicit_time(df_filtered),
+            "🔗 Feature Relationships": lambda: render_feature_relationships(df_filtered),
+            "🔗 Temporal Trends": lambda: render_temporal(df_filtered),
+            "👤 Artist Success Patterns": lambda: render_artists(df_filtered),
+            "🔍 Feature Explorer": lambda: render_explorer(df_filtered),
+            "🎵 Key & Mode": lambda: render_keys(df_filtered),
+            "📅 Decade Evolution": lambda: render_decades(df_filtered),
+            "💰 Genre Economics": lambda: render_genre_econ(df_filtered),
+            "⏱️ Tempo Zones": lambda: render_tempo(df_filtered),
+            "🌟 Popularity Lifecycle": lambda: render_pop_lifecycle(df_filtered),
+            "🚀 Artist Evolution": lambda: render_artist_evo(df_filtered),
+            "💬 Title Analytics": lambda: render_titles(df_filtered),
+            "🤝 Collaboration Patterns": lambda: render_collab(df_filtered),
         }
 
-        # The selectbox now drives what is shown
+        # --- 2. Show the selectbox ---
         selected_viz_name = st.selectbox(
             "Choose a visualization to load:", 
             list(viz_map.keys()), 
             key="viz_picker"
         )
+        
+        # --- 3. Show the Dashboard Summary ---
+        render_dashboard_summary() 
 
-        # Get the function associated with the selected name
+        # --- 4. Get and call the selected render function ---
         render_function = viz_map.get(selected_viz_name)
-
-        # Call the selected function
+        
         if render_function:
+            # The function is called here! The lambda passes df_filtered automatically.
             render_function() 
         else:
             st.error(f"Error: Could not find function for '{selected_viz_name}'.")
-
+        
         st.divider()
         
         # ---------------------------------------------------
@@ -3634,37 +3801,39 @@ if music_data is not None:
             ])
 
             with viz_tabs[0]:
-                render_evolution()
+                render_evolution(df_filtered)
             with viz_tabs[1]:
-                render_correlation()
+                render_correlation(df_filtered)
             with viz_tabs[2]:
-                render_genre_dna()
+                render_genre_dna(df_filtered)
             with viz_tabs[3]:
-                render_explicit()
+                render_explicit(df_filtered)
             with viz_tabs[4]:
-                render_explicit_time()
+                render_explicit_time(df_filtered)
             with viz_tabs[5]:
-                render_temporal()
+                render_feature_relationships(df_filtered)
             with viz_tabs[6]:
-                render_artists()
+                render_temporal(df_filtered)
             with viz_tabs[7]:
-                render_explorer()
+                render_artists(df_filtered)
             with viz_tabs[8]:
-                render_keys()
+                render_explorer(df_filtered)
             with viz_tabs[9]:
-                render_decades()
+                render_keys(df_filtered)
             with viz_tabs[10]:
-                render_genre_econ()
+                render_decades(df_filtered)
             with viz_tabs[11]:
-                render_tempo()
+                render_genre_econ(df_filtered)
             with viz_tabs[12]:
-                render_pop_lifecycle()
+                render_tempo(df_filtered)
             with viz_tabs[13]:
-                render_artist_evo()
+                render_pop_lifecycle(df_filtered)
             with viz_tabs[14]:
-                render_titles()
+                render_artist_evo(df_filtered)
             with viz_tabs[15]:
-                render_collab()
+                render_titles(df_filtered)
+            with viz_tabs[16]:
+                render_collab(df_filtered)
 
 
     # --------------------------------------------------------
