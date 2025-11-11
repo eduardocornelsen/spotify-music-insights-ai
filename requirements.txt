@@ -5,7 +5,6 @@ streamlit
 nbformat
 tabulate
 numpy
-streamlit-extras
 
 # Core LangChain e Google Gemini (o agente de execução)
 langchain

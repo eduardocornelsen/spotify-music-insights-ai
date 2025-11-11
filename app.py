@@ -10,7 +10,6 @@ from langchain.tools import tool
 import time
 import numpy as np
 from dataclasses import dataclass
-from streamlit_extras.stylable_container import stylable_container
 
 # --- Importações do LangChain (Tool Calling Agent) ---
 try:
