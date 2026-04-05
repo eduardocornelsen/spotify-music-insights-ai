@@ -1942,6 +1942,13 @@ if music_data is not None:
             return
 
         base = df_year_f[["year"] + selected].copy()
+        
+        # Always normalize loudness if selected, as it's the only feature not in 0-1 range (it's in dB)
+        if 'loudness' in base.columns and not normalize:
+            l_min, l_max = base['loudness'].min(), base['loudness'].max()
+            if l_max > l_min:
+                base['loudness'] = (base['loudness'] - l_min) / (l_max - l_min)
+
         if normalize:
             for c in selected:
                 rng = base[c].max() - base[c].min()
@@ -1955,9 +1962,16 @@ if music_data is not None:
             d1 = st.selectbox("First decade", decades, index=max(0, len(decades)-2), key="evo_d1")
             d2 = st.selectbox("Second decade", decades, index=max(0, len(decades)-1), key="evo_d2")
 
+            # Apply same normalization to compare dataframe if needed
             summary = (df_filtered[df_filtered["decade"].isin([d1, d2])]
                     .assign(group=lambda x: x["decade"].astype(str))
                     .groupby(["group","year"], as_index=False)[selected].mean())
+            
+            if 'loudness' in selected and not normalize:
+                l_min_s, l_max_s = summary['loudness'].min(), summary['loudness'].max()
+                if l_max_s > l_min_s:
+                    summary['loudness'] = (summary['loudness'] - l_min_s) / (l_max_s - l_min_s)
+
             melted = summary.melt(id_vars=["group","year"], var_name="Feature", value_name="Value")
             fig = px.line(melted, x="year", y="Value", color="Feature", line_dash="group",
                         title="Evolution (comparison by decade)", template="plotly_dark")
@@ -1966,8 +1980,8 @@ if music_data is not None:
             fig = px.line(melted, x="year", y="Value", color="Feature",
                         title="Evolution of Audio Features (1920-2020)", template="plotly_dark")
             
-        if 'loudness' not in selected:
-            fig.update_layout(yaxis_tickformat=".0%")
+        # All features are now in 0-1 range, so we can use percentage formatting
+        fig.update_layout(yaxis_tickformat=".0%")
 
         st.plotly_chart(fig, use_container_width=True)
 
