@@ -14,6 +14,8 @@ textColor = "#FFFFFF"
 # Sans serif like Spotify's Circular
 font = "sans serif"
 
+sidebarWidth = 400
+
 [server]
 # Dark theme for better Spotify feel
 headless = true
@@ -21,6 +23,3 @@ headless = true
 [browser]
 # Custom tab title
 gatherUsageStats = false
-
-[ui]
-sidebarWidth = 400

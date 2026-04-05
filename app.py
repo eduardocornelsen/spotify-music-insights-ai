@@ -18,8 +18,7 @@ from collections import Counter
 # --- Importações do LangChain (Tool Calling Agent) ---
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
-    from langchain.agents import create_agent
-    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.messages import HumanMessage, SystemMessage
     
     IA_DISPONIVEL = True
 except ImportError:
@@ -46,8 +45,10 @@ def set_viz(viz_name: str):
     """
     Callback function to update the visualization picker.
     (Used by the TOC buttons)
+    Also switches the active tab to Dashboard so the chart loads immediately.
     """
     st.session_state.viz_picker = viz_name
+    st.session_state.current_tab = "Dashboard"
 
 def set_main_tab(tab_name: str):
     """
@@ -1029,9 +1030,10 @@ def PythonCodeExecutor(code: str) -> str:
         # Default 'df' alias to tracks-level dataset
         df = df_tracks
 
-        # Basic anti-fabrication (disallow creating DataFrame from dict literal)
-        if "pd.DataFrame" in code and "{" in code:
-            return "ERROR: Do NOT create fake DataFrames. Use the provided DataFrames only (df, df_tracks, df_year, df_artist, df_genres, df_w_genres)."
+        # Basic anti-fabrication: block only literal hard-coded dict literals with numbers/strings as values
+        # (Allows: pd.DataFrame from computed variables, which is legitimate)
+        if re.search(r"pd\.DataFrame\(\s*\{\s*['\"][^'\"]+['\"]\s*:\s*\[", code):
+            return "ERROR: Do NOT create fake DataFrames with hardcoded data. Use the provided DataFrames only (df, df_tracks, df_year, df_artist, df_genres, df_w_genres)."
 
         # Execute in a controlled namespace
         exec_env = {
@@ -1559,100 +1561,64 @@ if music_data is not None:
         </div>
         """
         
-        TOC_DETAILS_MD = """
-        - **Columns Used:** `{columns}`
-        - **Main `.groupby()`:** `{groupby}`
-        """
+
 
         # --- LIST OF ALL VISUALIZATIONS ---
         # (This data is all the same)
         viz_toc = {
             "📈 Evolution of Features": {
                 "problem": "How have the sonic qualities of music (like energy and acousticness) changed over the last 100 years?",
-                "cols": "year, danceability, energy, valence, acousticness, instrumentalness, speechiness, liveness, loudness",
-                "gb": "df_filtered.groupby('year', ...)"
             },
             "📊 Popularity vs Features": {
                 "problem": "Is there a correlation between a song's audio features (like high energy) and its popularity? Which feature is the best predictor of a hit?",
-                "cols": "popularity, energy, danceability, valence, acousticness, instrumentalness, speechiness",
-                "gb": "No groupby; plots sampled raw data."
             },
             "🎸 Genre DNA": {
                 "problem": "What is the unique audio 'signature' of different genres? How do genres compare in terms of energy, valence, etc.?",
-                "cols": "genres, popularity, energy, danceability, valence, acousticness, speechiness",
-                "gb": "gframe_filtered.groupby('genres', ...)"
             },
             "🔞 Explicit Strategy": {
                 "problem": "Is explicit content a successful commercial strategy? How does it impact popularity and other audio features?",
-                "cols": "explicit, popularity, energy, danceability, valence, speechiness",
-                "gb": "No groupby; maps and plots data directly."
             },
             "📈 Explicit Over Time": {
                 "problem": "When did explicit content become mainstream? Which genres pioneered it, and how has its popularity trended over time?",
-                "cols": "year, explicit, genres, popularity",
-                "gb": "df_filtered.groupby(['year','explicit']), gframe_filtered.groupby('genres')"
             },
             "🔗 Feature Relationships": {
                 "problem": "Which audio features are most strongly correlated? Can we identify a 'formula' for success by analyzing feature averages for high-popularity songs?",
-                "cols": "danceability, energy, valence, acousticness, instrumentalness, loudness, speechiness, popularity",
-                "gb": "df_success.groupby('success_level')"
             },
             "🕓 Temporal Trends": {
                 "problem": "How have song duration and tempo (BPM) changed over the decades? Can we project future trends?",
-                "cols": "year, duration_ms, tempo",
-                "gb": "df_filtered.groupby('year') (via aggregate_by_year)"
             },
             "👤 Artist Success Patterns": {
                 "problem": "What separates consistent hitmakers from 'one-hit wonders'? This analyzes volume vs. quality, consistency, and the audio signature of top artists.",
-                "cols": "artists, popularity, energy, valence, count",
-                "gb": "df_filtered.groupby('artist_clean') (via aggregate_by_artist)"
             },
             "🔍 Feature Explorer": {
                 "problem": "What interactive combinations of features (e.g., Energy vs. Danceability) lead to the most popular songs? Where are the 'sweet spots'?",
-                "cols": "User-selected X/Y features (e.g., danceability, energy, popularity), decade",
-                "gb": "No groupby; plots sampled raw data."
             },
             "🎵 Key & Mode": {
                 "problem": "Do certain musical keys (C, G, A#) or modes (Major vs. Minor) correlate with higher popularity or specific emotions (valence)?",
-                "cols": "key, mode, popularity, valence",
-                "gb": "df_keys.groupby(['key_name', 'mode_name'])"
             },
             "📅 Decade Evolution": {
                 "problem": "How does the distribution of a single feature change across decades? Are modern songs more or less diverse in their sound?",
-                "cols": "decade, User-selected feature (e.g., valence)",
-                "gb": "df_decades.groupby('decade')"
             },
             "💰 Genre Economics": {
                 "problem": "Which genres have the highest popularity ('Power Rankings')? What is their 'Market Share' (volume of tracks)?",
-                "cols": "genres, popularity",
-                "gb": "gframe_filtered.groupby('genres')"
             },
             "⏱️ Tempo Zones": {
                 "problem": "Is there an optimal BPM for hit songs? This analyzes popularity by 'BPM Zones' (Slow, Dance, Fast) and how those preferences have evolved.",
-                "cols": "tempo, popularity, decade",
-                "gb": "df_tempo.groupby('bpm_zone'), df_tempo.groupby(['decade', 'bpm_zone'])"
             },
             "🌟 Popularity Lifecycle": {
                 "problem": "How has average popularity changed over 100 years (the 'Streaming Effect')? What audio features do 'timeless' songs have in common?",
-                "cols": "year, popularity, era, energy, danceability, valence, acousticness",
-                "gb": "df_filtered.groupby('year'), df_eras.groupby('era'), df_timeless.groupby('is_timeless')"
             },
             "🚀 Artist Evolution": {
                 "problem": "Which artists dominated each era? This analyzes artist performance over time, career longevity, and 'Rising Stars' with high momentum.",
-                "cols": "artists, year, decade, popularity, name",
-                "gb": "df_artist_time.groupby(['time_period', 'artist_clean']), df_dominance.groupby('artist_clean'), df_longevity.groupby('artist_clean')"
             },
             "💬 Title Analytics": {
                 "problem": "Do song titles affect popularity? This analyzes title length, most common words in hits, and the impact of patterns (like 'feat.', '()', or 'ALL CAPS').",
-                "cols": "name, popularity",
-                "gb": "df_titles.groupby(word_bins), df_titles.groupby('has_feat')"
             },
             "🤝 Collaboration Patterns": {
                 "problem": "Do collaborations (songs with >1 artist) actually perform better? What is the optimal 'team size' for a hit song?",
-                "cols": "artists, artist_count, popularity, year",
-                "gb": "df_collab.groupby('is_collab'), df_collab.groupby('year'), df_collab.groupby('artist_count')"
             }
         }
+
         
         # --- CREATE 3-COLUMN LAYOUT ---
         cols = st.columns(3)
@@ -1661,14 +1627,8 @@ if music_data is not None:
             with cols[i % 3]:
                 with st.expander(f"**{i+1}. {viz_name}**", expanded=True):
                     
-                    # Use st.html for the new info box
+                    # Key Problem info box
                     st.html(TOC_INFO_BOX.format(problem_text=details["problem"]))
-                    
-                    # This markdown remains left-aligned by default
-                    st.markdown(TOC_DETAILS_MD.format(
-                        columns=details["cols"],
-                        groupby=details["gb"]
-                    ))
                     
                     # Center the button
                     st.markdown("<br>", unsafe_allow_html=True) 
@@ -3971,48 +3931,23 @@ if music_data is not None:
         default_index = list(viz_map.keys()).index(current_picker_value)
         
 
-        # --- 3. RENDER CONTROLS (Selectbox and Toggle) ---
-        col_select, col_toggle = st.columns([4, 2])
-        
-        with col_select:
-            selected_viz_name = st.selectbox(
-                "Choose a visualization to load:", 
-                list(viz_map.keys()), 
-                key="viz_picker",
-                # Pass the calculated index
-                index=default_index 
-            )
-
-        with col_toggle:
-            st.markdown("<br>", unsafe_allow_html=True)
-            performance_mode = st.checkbox(
-                "⚡ Performance Mode", 
-                value=st.session_state.get('perf_mode', False),
-                key="perf_mode", 
-                help="Load all visualizations at once in tabs. May be slow."
-            )
+        # --- 3. RENDER CONTROLS (Single Selectbox) ---
+        selected_viz_name = st.selectbox(
+            "Choose a visualization to load:", 
+            list(viz_map.keys()), 
+            key="viz_picker",
+            index=default_index 
+        )
 
         st.divider()
 
-        # --- 4. CONDITIONAL RENDERING ---
+        # --- 4. ON-DEMAND RENDERING ---
+        render_function = viz_map.get(selected_viz_name)
         
-        # ... (The rest of your logic for conditional rendering runs here) ...
-        
-        if performance_mode:
-            st.info("All visualizations are loaded below in scrollable tabs. Filter changes will update all tabs.")
-        
-        # ... (Your st.tabs rendering and function calls for all 17 VIZs go here) ...
-
-        else: # Standard On-Demand Mode
-            # Render ONLY the selected visualization
-            render_function = viz_map.get(selected_viz_name)
-            
-            if render_function:
-                # The lambda calls the function with df_filtered
-                render_function() 
-            else:
-                # This should now only happen if the map is misdefined
-                st.error(f"Internal Error: Could not find function for '{selected_viz_name}'.")
+        if render_function:
+            render_function()
+        else:
+            st.error(f"Internal Error: Could not find function for '{selected_viz_name}'.")
 
     # --------------------------------------------------------
     # TAB 3: INSIGHTS
@@ -4208,16 +4143,19 @@ if music_data is not None:
                     st.write("Please add the `GOOGLE_API_KEY` environment variable.")
                     st.stop()
                 
+                MODEL_NAME = "gemini-2.0-flash"
+
                 @st.cache_resource
-                def get_ai_agent(api_key: str):
-                    model = ChatGoogleGenerativeAI(
-                        model="gemini-2.5-flash",
+                def get_ai_model(api_key: str, model_name: str):
+                    """Returns a model with the PythonCodeExecutor tool bound to it."""
+                    llm = ChatGoogleGenerativeAI(
+                        model=model_name,
                         google_api_key=api_key,
                         temperature=0
                     )
-                    return create_agent(model=model, tools=tools, system_prompt=system_prompt)
+                    return llm.bind_tools([PythonCodeExecutor])
                 
-                agent = get_ai_agent(api_key)
+                bound_model = get_ai_model(api_key, MODEL_NAME)
 
                 # Initialize chat history
                 if "chat_messages_executor" not in st.session_state:
@@ -4382,61 +4320,93 @@ if music_data is not None:
 
                         try:
                             with st.spinner("Analyzing music data..."):
-                                response = agent.invoke({"messages": st.session_state.chat_messages_executor})
+                                # --- SINGLE API CALL PATTERN WITH MEMORY ---
+                                # Step 1: Ask the model (with tool bound) what code to run.
+                                messages = [SystemMessage(content=system_prompt)]
+                                
+                                # Add history (up to last 10 messages to save tokens), excluding the very last one we just appended
+                                history = st.session_state.chat_messages_executor[-11:-1]
+                                for msg in history:
+                                    if msg["role"] == "user":
+                                        messages.append(HumanMessage(content=msg["content"]))
+                                    else:
+                                        messages.append(AIMessage(content=msg["content"]))
+                                        
+                                # Add current question
+                                messages.append(HumanMessage(content=user_input))
 
-                            # Check for malformed call
-                            if response["messages"][-1].response_metadata.get('finish_reason') == 'MALFORMED_FUNCTION_CALL':
-                                message_placeholder.empty()
-                                st.error("The model had difficulty processing your request. Please try rephrasing.")
-                                st.stop()    
+                                ai_response = bound_model.invoke(messages)
 
-                            # Extract AI response
-                            ai_content = response["messages"][-1].content
+                            # Step 2: If the model wants to call the tool, run it locally.
+                            tool_output = None
+                            code_executed = "N/A"
 
-                            if isinstance(ai_content, list) and len(ai_content) > 0:
-                                text_content = ai_content[0].get('text', '')
+                            if ai_response.tool_calls:
+                                tool_call = ai_response.tool_calls[0]  # Always one tool
+                                code_executed = tool_call["args"].get("code", "")
+                                tool_output = PythonCodeExecutor.invoke(code_executed)
+
+                            # Step 3: Build final answer
+                            # The model's text content (summary before/after tool call)
+                            text_content = ""
+                            if isinstance(ai_response.content, list):
+                                for item in ai_response.content:
+                                    if isinstance(item, dict):
+                                        text_content += item.get('text', '')
+                                    elif isinstance(item, str):
+                                        text_content += item
+                            elif isinstance(ai_response.content, str):
+                                text_content = ai_response.content
+
+                            # Clean up any residual placeholder markers
+                            text_content = re.sub(r'\[CODE_OUTPUT\][:\s]*', '', text_content).strip()
+                            text_content = re.sub(r'\[FINAL_ANSWER\][:\s]*', '', text_content).strip()
+
+                            if tool_output and tool_output.strip():
+                                # Combine the model's intro text with the real tool output
+                                if text_content:
+                                    final_answer = f"{text_content}\n\n{tool_output.strip()}"
+                                else:
+                                    final_answer = tool_output.strip()
                             else:
-                                text_content = ai_content
+                                final_answer = text_content or "_(No output from analysis)_"
 
-                            # DEBUG
-                            with st.expander("🔍 Debug: View executed code"):
-                                st.code(str(response), language="python")
-
-                            # --- FIX: Parse using the new markers ---
-                            
-                            # 1. Find the code block
-                            code_match = text_content.split("[CODE_OUTPUT]:")
-                            code_executed = code_match[1].split("[FINAL_ANSWER]:")[0].strip() if len(code_match) > 1 else "N/A"
-                            
-                            # 2. Find the final response text
-                            answer_match = text_content.split("[FINAL_ANSWER]:")
-                            final_answer = answer_match[-1].strip() if len(answer_match) > 1 else text_content
-                            
-                            # 3. Display the Final Answer
+                            # Display the answer
                             message_placeholder.markdown(final_answer)
 
-                            # 4. Display the code/thoughts in the expander
-                            with st.expander("🔬 Agent's Analysis & Code"):
-                                st.markdown("### Reasoning and Code Executed")
-                                
-                                # Display the code block itself
-                                st.code(code_executed, language="python")
-                                
-                                # Display the full raw output (for debugging visibility)
-                                if code_executed == "N/A":
-                                     st.warning("Tool call did not execute successfully or output was missing markers.")
-                                     st.code(text_content, language="text")
+                            # Show code in expander
+                            if code_executed != "N/A":
+                                with st.expander("🔬 Code Executed"):
+                                    st.code(code_executed, language="python")
+                                    if tool_output:
+                                        st.markdown("**Output:**")
+                                        st.markdown(tool_output)
 
-                            # 5. Store history
+                            # Store in chat history
                             st.session_state.chat_messages_executor.append({
                                 "role": "assistant",
-                                "content": final_answer 
+                                "content": final_answer
                             })
 
                         except Exception as e:
                             message_placeholder.empty()
-                            st.error(f"Error during processing: {str(e)}")
-                            st.write("Error details:", e)
+                            err_str = str(e)
+                            # --- Friendly error messages for known failure modes ---
+                            if "429" in err_str or "quota" in err_str.lower() or "ResourceExhausted" in type(e).__name__:
+                                st.warning(
+                                    "⏳ **API Rate Limit Reached.** You've temporarily exceeded the free-tier quota. "
+                                    "Please wait 15–30 seconds and try again, or upgrade your Google AI plan."
+                                )
+                            elif "recursion" in err_str.lower() or "GraphRecursionError" in type(e).__name__:
+                                st.warning(
+                                    "🔄 **The agent could not finish in the allowed number of steps.** "
+                                    "Try rephrasing your question to be more specific, or break it into smaller parts."
+                                )
+                            else:
+                                st.error(f"❌ Error during processing: {err_str}")
+                                
+                            with st.expander("🛠️ View Full Error Details"):
+                                st.exception(e)
 
             except Exception as e:
                 st.error(f"Error initializing Agent: {e}")

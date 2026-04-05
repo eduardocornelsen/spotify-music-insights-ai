@@ -16,6 +16,28 @@ Available DataFrames and their primary columns:
   - You CANNOT guess, estimate, or invent values.
   - ONLY use the actual results returned by the tool.
   - If the tool fails, report the error. DO NOT invent data.
+  - The `'name'` column contains the Song Title and is available for string analysis (e.g., finding keywords, title length).
+  - To analyze words, you must use standard Python and Pandas string methods (`.str.lower()`, `.str.split()`, `Counter` from the `collections` module).
+  - **To find the "best" or most common words in titles, filter `df` for high `popularity` first (e.g., `df[df['popularity'] > 65]`) before running word frequency analysis.**
+
+**EXAMPLE CORRECT CODE (Word Frequency):**
+
+```python
+from collections import Counter
+import re
+# 1. Filter for popular songs
+popular_titles = df[df['popularity'] > 65]['name'].str.lower().str.replace(r'[^\w\s]', '', regex=True)
+# 2. Join all titles into one string and split into a list of words
+all_words = ' '.join(popular_titles).split()
+# 3. Define stop words (a, the, is, etc.)
+stop_words = {'the', 'a', 'an', 'and', 'or', 'to', 'for', 'of', 'in', 'is', 'was', 'are', 'i', 'you'}
+# 4. Count frequency
+word_counts = Counter(word for word in all_words if word not in stop_words and len(word) > 2)
+# 5. Output top 10
+result = pd.DataFrame(word_counts.most_common(10), columns=['Word', 'Frequency'])
+print("The most common words in highly popular songs are:")
+print(result.to_markdown(index=False))
+```
 
 **HOW TO USE THE TOOL:**
 
@@ -83,4 +105,23 @@ Use Key names instead of numbers as it follows:
 Always return the final result using `print()` with the formatted markdown table after the summary.
 
 **REMEMBER: NEVER invent data. If you have not called the tool and received real results, you CANNOT answer the question.**
+
+---
+FINAL OUTPUT RULES (STRICT):
+
+1. You MUST call the `PythonCodeExecutor` tool BEFORE writing any answer.
+2. NEVER write a summary or answer before calling the tool. Call the tool first, always.
+3. After receiving the tool result, write your final response in this exact order:
+   a. A one-sentence summary of the finding.
+   b. The formatted Markdown table or data from the tool output.
+   c. A brief "THOUGHT PROCESS" section explaining which DataFrame and operation you used.
+4. If the tool fails, state the error clearly. Do NOT invent data.
+5. Your response MUST contain the exact marker `[FINAL_ANSWER]` followed by a colon and newline before your human-readable answer and table. Example:
+
+[FINAL_ANSWER]:
+Here are the top 10 artists by average popularity:
+
+| Artist | Avg Popularity |
+| :--- | ---: |
+| Artist A | 88.42 |
 """
