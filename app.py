@@ -4,6 +4,7 @@ import plotly.express as px
 import io
 import sys
 import re
+import base64
 from pathlib import Path
 from scipy import stats
 from langchain.tools import tool
@@ -872,7 +873,15 @@ if 'current_tab' not in st.session_state:
 
 # --- Sidebar Navigation ---
 
-spotify_logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/1024px-Spotify_logo_without_text.svg.png"
+def get_base64_encoded_image(image_path):
+    try:
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except Exception:
+        return ""
+
+spotify_logo_base64 = get_base64_encoded_image("assets/spotify_logo.svg")
+spotify_logo_url = f"data:image/svg+xml;base64,{spotify_logo_base64}"
 dataset_url = "https://www.kaggle.com/datasets/yamaerenay/spotify-dataset-19212020-160k-tracks"
 
 header_html = f"""
